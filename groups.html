@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ChatSpace — Groups</title>
+<style>
+  :root{--bg:#f7f7f8;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--accent:#3b82f6;--danger:#ef4444}
+  *{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Arial;background:var(--bg);color:var(--text)}
+  header{background:#fff;border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
+  .nav a{margin-left:8px;text-decoration:none;padding:8px 12px;border:1px solid var(--border);border-radius:999px;color:var(--text)}
+  .nav a.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .wrap{max-width:1180px;margin:0 auto;padding:14px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;margin:10px 0}
+  .row{display:flex;align-items:center;gap:8px}.row.end{justify-content:flex-end}
+  .input{padding:8px 10px;border-radius:10px;border:1px solid var(--border);flex:1}
+  .btn{padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:#fff;cursor:pointer}
+  .btn.primary{background:var(--accent);color:#fff;border:none}.btn.danger{background:#fee2e2;border-color:#fecaca;color:#991b1b}
+  .grid{display:grid;grid-template-columns:320px 1fr 320px;gap:12px}
+  @media(max-width:1100px){.grid{grid-template-columns:1fr}}
+  .list>*+*{border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
+  .bubble{border:1px solid var(--border);border-radius:10px;padding:8px;background:#fff}
+  #groupMessages{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto}
+  .me{background:#eef2ff}
+  .userItem{display:flex;align-items:center;justify-content:space-between;padding:8px;border:1px solid var(--border);border-radius:10px}
+  .muted{color:var(--muted)} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+</style>
+</head><body>
+<header>
+  <strong>ChatSpace — Groups</strong>
+  <nav class="nav">
+    <a href="./messages.html">💬 Messages</a>
+    <a class="active" href="./groups.html">👥 Groups</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <div id="status" class="muted" style="margin:6px 0;"></div>
+
+  <div class="card">
+    <div class="row">
+      <input id="me" class="input" placeholder="choose a username (e.g. alice)">
+      <button id="claim" class="btn primary">Use / Claim</button>
+      <div class="muted mono">Share: <span id="share"></span></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Left: create/join + my groups + members -->
+    <div>
+      <div class="card">
+        <h3>Create / Join</h3>
+        <div class="row"><input id="groupName" class="input" placeholder="group name (e.g. class7)"></div>
+        <div class="row" style="margin-top:8px">
+          <input id="groupUsers" class="input" placeholder="initial members (comma-separated)">
+          <button id="createGroup" class="btn primary">Create / Add</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>My Groups</h3>
+        <div id="myGroups" class="list"></div>
+      </div>
+
+      <div class="card">
+        <h3>Members of <span id="gNameMono" class="mono">—</span></h3>
+        <div id="members" class="list"></div>
+        <div class="row" style="margin-top:8px">
+          <input id="addMemberInput" class="input" placeholder="add members (comma-separated)">
+          <button id="addMemberBtn" class="btn">Add to Current Group</button>
+        </div>
+        <div class="row end" style="margin-top:8px">
+          <button id="leaveGroup" class="btn danger">Leave This Group</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Middle: group chat -->
+    <div>
+      <div class="card">
+        <h3>Group: <span id="activeGroup" class="mono">—</span></h3>
+        <div id="groupMessages"></div>
+        <div class="row end" style="margin-top:8px">
+          <textarea id="groupMsg" class="input" placeholder="Message the group… (Enter to send)"></textarea>
+          <button id="groupSend" class="btn primary">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Registered Users (with Add to Group buttons) -->
+    <div>
+      <div class="card">
+        <h3>Registered Users</h3>
+        <div id="registeredUsers" class="list"></div>
+        <p class="muted" style="margin-top:6px">Click “Add to Group” to add them to the currently open group.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+import { getDatabase, ref, onValue, off, set, update, push, get, child } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
+
+const app = initializeApp({ databaseURL: "https://my-chat-ddcd1-default-rtdb.firebaseio.com/" });
+const db = getDatabase(app);
+
+// helpers
+const $=s=>document.querySelector(s), t=()=>Date.now();
+const esc = s => (s||"").replace(/[<>&]/g,m=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[m]));
+const info=m=>{const el=$("#status"); el.textContent=m; setTimeout(()=>el.textContent="",2000);};
+
+// elements
+const meBox=$("#me"), claimBtn=$("#claim"), share=$("#share");
+const groupName=$("#groupName"), groupUsers=$("#groupUsers"), createGroup=$("#createGroup");
+const myGroups=$("#myGroups"), members=$("#members"), gNameMono=$("#gNameMono"), activeGroup=$("#activeGroup");
+const groupMessages=$("#groupMessages"), groupMsg=$("#groupMsg"), groupSend=$("#groupSend");
+const addMemberInput=$("#addMemberInput"), addMemberBtn=$("#addMemberBtn"), leaveGroupBtn=$("#leaveGroup");
+const regUsers=$("#registeredUsers");
+
+let me=null, gmRef=null, gmCb=null, memRef=null, memCb=null, currentGroup=null;
+
+async function useOrClaim(){
+  const u=(meBox.value||'').trim().toLowerCase(); if(!u) return;
+  const s=await get(child(ref(db),'users/'+u));
+  if(!s.exists()) await set(ref(db,'users/'+u), { createdAt:t() });
+  me=u; localStorage.setItem("cs_username",me);
+  history.replaceState({},'',location.pathname+'?u='+me);
+  share.textContent=location.origin+location.pathname+'?u='+me;
+  info("Using username: "+me);
+  watchMyGroups(); watchUsers();
+  const last = localStorage.getItem("cs_last_group"); if(last) openGroup(last);
+}
+claimBtn.onclick=useOrClaim;
+
+// auto-load
+const saved=(localStorage.getItem("cs_username")||'').trim(); if(saved){ meBox.value=saved; useOrClaim(); }
+
+// my groups
+function watchMyGroups(){
+  if(!me) return;
+  onValue(ref(db,'user_groups/'+me),(snap)=>{
+    const d=snap.val()||{}; const list=Object.keys(d).sort();
+    myGroups.innerHTML = list.length ? list.map(g=>`
+      <div class="userItem"><div>#${esc(g)}</div>
+      <button class="btn" data-open="${esc(g)}">Open</button></div>`).join('') : '<div class="muted">You are not in any groups yet.</div>';
+  });
+}
+
+// users + presence (with Add to Group button)
+function watchUsers(){
+  onValue(ref(db,'users'), (snapUsers)=>{
+    const allUsers=snapUsers.val()||{};
+    onValue(ref(db,'presence'), (snapP)=>{
+      const pres=snapP.val()||{};
+      const names=Object.keys(allUsers).sort();
+      regUsers.innerHTML = names.length ? names.map(u=>{
+        const online = pres[u]?.online ? ' (online)' : '';
+        return `<div class="userItem">
+          <div><strong>@${esc(u)}</strong><span class="muted">${online}</span></div>
+          <button class="btn" data-add-to-group="${esc(u)}">Add to Group</button>
+        </div>`;
+      }).join('') : '<div class="muted">No registered users yet.</div>';
+    });
+  });
+}
+
+async function createOrAddMembers(){
+  if(!me) return info('Use/claim a username first.');
+  const g=(groupName.value||'').trim().toLowerCase(); if(!g) return;
+  await set(ref(db,'groups/'+g), { createdAt:t() });
+  const raw=(groupUsers.value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const unique=new Set([me, ...raw]); const updates={};
+  unique.forEach(u=>{ updates['group_members/'+g+'/'+u]=true; updates['user_groups/'+u+'/'+g]=true; });
+  await update(ref(db),updates);
+  groupName.value=''; groupUsers.value='';
+  openGroup(g); info('Group created/updated.');
+}
+createGroup.onclick=createOrAddMembers;
+
+function openGroup(g){
+  currentGroup=g; localStorage.setItem("cs_last_group", g);
+  activeGroup.textContent='#'+g; gNameMono.textContent='#'+g; groupMessages.innerHTML='';
+  if(gmRef && gmCb) off(gmRef, gmCb); if(memRef && memCb) off(memRef, memCb);
+
+  gmRef = ref(db,'group_messages/'+g);
+  gmCb = (snap)=>{
+    const d=snap.val()||{}; const arr=Object.values(d).sort((a,b)=>a.ts-b.ts);
+    groupMessages.innerHTML = arr.map(m=>`
+      <div class="bubble ${m.from===me?'me':''}">
+        <div class="muted mono">@${esc(m.from)}</div>
+        <div>${esc(m.text)}</div>
+      </div>`).join('');
+    groupMessages.scrollTop = groupMessages.scrollHeight;
+  };
+  onValue(gmRef, gmCb);
+
+  memRef = ref(db,'group_members/'+g);
+  memCb = (snap)=>{
+    const d=snap.val()||{}; const list=Object.keys(d).sort();
+    members.innerHTML = list.map(u=>`<div class="userItem"><div>@${esc(u)}</div></div>`).join('');
+    leaveGroupBtn.style.display = list.includes(me) ? 'inline-block' : 'none';
+  };
+  onValue(memRef, memCb);
+}
+
+async function sendToGroup(){
+  const text=(groupMsg.value||'').trim(); if(!text||!currentGroup) return;
+  await push(ref(db,'group_messages/'+currentGroup), { from: me, text, ts: t() });
+  groupMsg.value='';
+}
+groupSend.onclick=sendToGroup;
+groupMsg.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendToGroup();}});
+
+async function addMembersToCurrent(list){
+  if(!me) return info('Use/claim a username first.');
+  if(!currentGroup) return info('Open a group first.');
+  const raw=(list || addMemberInput.value || '').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  if(!raw.length) return;
+  const updates={}; raw.forEach(u=>{ updates['group_members/'+currentGroup+'/'+u]=true; updates['user_groups/'+u+'/'+currentGroup]=true; });
+  await update(ref(db),updates); addMemberInput.value=''; info('Member(s) added.');
+}
+addMemberBtn.onclick=()=>addMembersToCurrent();
+
+async function leaveCurrentGroup(){
+  if(!me || !currentGroup) return;
+  const g=currentGroup; const updates={};
+  updates['group_members/'+g+'/'+me]=null; updates['user_groups/'+me+'/'+g]=null;
+  await update(ref(db),updates);
+  info('You left #'+g); currentGroup=null; activeGroup.textContent='—'; gNameMono.textContent='—'; groupMessages.innerHTML=''; members.innerHTML='';
+}
+leaveGroupBtn.onclick=leaveCurrentGroup;
+
+// delegated clicks
+document.body.addEventListener('click',(e)=>{
+  const o=e.target.getAttribute('data-open'); if(o) return openGroup(o);
+  const ag=e.target.getAttribute('data-add-to-group'); if(ag) return addMembersToCurrent(ag);
+});
+</script>
+</body></html>
