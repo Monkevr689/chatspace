@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChatSpace — Diagnostic Build (No Login)</title>
+  <style>
+    :root {--bg:#0b1020;--card:#11172b;--border:#253052;--text:#eef2ff;--muted:#9aa4c7;--accent:#5b8cff}
+    *{box-sizing:border-box} body{margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--text)}
+    header{background:var(--card);border-bottom:1px solid var(--border); padding:12px 16px; display:flex; gap:10px; align-items:center; justify-content:space-between}
+    .wrap{max-width:960px;margin:0 auto;padding:16px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;margin:10px 0}
+    .row{display:flex;gap:8px;align-items:center} .row.sb{justify-content:space-between}
+    .btn{padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:#0f1730;color:var(--text);cursor:pointer}
+    .btn.primary{background:var(--accent);border:none}
+    .input{padding:8px 10px;border-radius:10px;border:1px solid var(--border);flex:1;background:#0f1730;color:var(--text)}
+    textarea{width:100%;min-height:70px;padding:8px;border-radius:10px;border:1px solid var(--border);background:#0f1730;color:var(--text)}
+    .list>*+*{border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
+    .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#b7c1e6}
+    .ok{color:#6ee7b7}.err{color:#fca5a5}
+    details{background:#0f1730;padding:8px;border-radius:10px;border:1px dashed var(--border)}
+    code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#e9edf8}
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex;gap:10px;align-items:center">
+      <strong>ChatSpace (No Login)</strong>
+      <span class="mono" id="status"></span>
+    </div>
+    <button class="btn" id="selftest">Run Self‑Test</button>
+  </header>
+
+  <div class="wrap">
+    <div class="card">
+      <div class="row">
+        <input id="me" class="input" placeholder="choose a username (e.g. alice)">
+        <button id="claim" class="btn primary">Claim username</button>
+        <div class="mono">Share: <span id="share"></span></div>
+      </div>
+    </div>
+
+    <div class="row" style="gap:10px">
+      <div class="card" style="flex:1">
+        <h3>Find someone</h3>
+        <div class="row">
+          <input id="findUser" class="input" placeholder="enter username (e.g. bob)">
+          <button id="sendReq" class="btn primary">Send Request</button>
+        </div>
+        <h4>Incoming</h4>
+        <div id="incoming" class="list"></div>
+        <h4>Outgoing</h4>
+        <div id="outgoing" class="list"></div>
+      </div>
+
+      <div class="card" style="flex:1">
+        <h3>Friends</h3>
+        <div id="friends" class="list"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Chatting with <span id="chatWith" class="mono"></span></h3>
+      <div id="chatArea"></div>
+      <div style="margin-top:8px;">
+        <textarea id="msg" placeholder="Type a message... (Enter to send)"></textarea>
+        <div class="row" style="justify-content:flex-end;margin-top:6px;">
+          <button id="send" class="btn primary">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Diagnostics</h3>
+      <div id="diag" class="mono"></div>
+      <details><summary>How this works</summary>
+        <p>This build removes Firebase Auth completely. It only uses Realtime Database with public writes/reads (test rules). Buttons log any errors below.</p>
+        <p>If you see <span class="err">Permission denied</span>, your Database Rules are not open. In Firebase Console → Realtime Database → Rules → publish test rules or use the stricter set I can provide.</p>
+      </details>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js';
+    import { getDatabase, ref, onValue, set, update, push, get, child } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDnbwyAUSygp6kUPLZHue7XABe2AbX_ou4",
+      authDomain: "website-31d36.firebaseapp.com",
+      databaseURL: "https://website-31d36-default-rtdb.firebaseio.com",
+      projectId: "website-31d36",
+      storageBucket: "website-31d36.firebasestorage.app",
+      messagingSenderId: "565028198971",
+      appId: "1:565028198971:web:3946fd378bf7a385309a1e",
+      measurementId: "G-NCQG7BQGZY"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const $ = s => document.querySelector(s);
+    const log = (m, ok=true) => { const el=$('#diag'); const line=document.createElement('div'); line.innerHTML = (ok?'<span class=ok>✔</span> ':'<span class=err>✖</span> ')+m; el.prepend(line); }
+    const info = (m)=> $('#status').textContent = m;
+    const t = ()=> Date.now();
+    const tid=(a,b)=>[a,b].sort().join('__');
+
+    const meBox=$('#me'), claimBtn=$('#claim'), share=$('#share'),
+          find=$('#findUser'), sendReq=$('#sendReq'),
+          incoming=$('#incoming'), outgoing=$('#outgoing'),
+          friends=$('#friends'), chatWith=$('#chatWith'),
+          chatArea=$('#chatArea'), msg=$('#msg'), send=$('#send'),
+          selftestBtn=$('#selftest');
+
+    let me=null, peer=null;
+
+    async function claimUsername(){
+      try {
+        const u=(meBox.value||'').trim().toLowerCase();
+        if(!u) return;
+        const snap=await get(child(ref(db),'users/'+u));
+        if(snap.exists()) { alert('Username taken'); return; }
+        await set(ref(db,'users/'+u), { createdAt:t() });
+        me=u;
+        history.replaceState({},'',location.pathname+'?u='+me);
+        share.textContent = location.origin + location.pathname + '?u=' + me;
+        info('Username set.');
+        loadAll();
+        log('Claimed username '+u);
+      } catch (e) { console.error(e); log('claimUsername: '+e.message, false); }
+    }
+
+    function loadAll(){
+      if(!me) return;
+      onValue(ref(db,'requests/'+me),(snap)=>{
+        try{
+          const data = snap.val()||{};
+          const inc = Object.entries(data).filter(([,r])=>r.status==='pending').map(([from,r])=>({from,ts:r.ts})).sort((a,b)=>b.ts-a.ts);
+          incoming.innerHTML = inc.length ? inc.map(r=>`
+            <div class="row sb">
+              <div>@${r.from}</div>
+              <div class="row">
+                <button class="btn primary" data-accept="${r.from}">Accept</button>
+                <button class="btn" data-decline="${r.from}">Decline</button>
+              </div>
+            </div>`).join('') : '<div class="mono">No pending.</div>';
+          log('Loaded incoming requests');
+        } catch(e){ console.error(e); log('incoming onValue: '+e.message, false); }
+      });
+
+      onValue(ref(db,'requests'),(snap)=>{
+        try{
+          const all = snap.val()||{}; const out=[];
+          for(const to of Object.keys(all)){ const b=all[to]||{}; if(b[me]) out.push({to,status:b[me].status,ts:b[me].ts}); }
+          out.sort((a,b)=>b.ts-a.ts);
+          outgoing.innerHTML = out.length ? out.map(r=>`<div class="row sb"><div>@${r.to}</div><span class="mono">${r.status}</span></div>`).join('') : '<div class="mono">None.</div>';
+          log('Loaded outgoing requests');
+        } catch(e){ console.error(e); log('outgoing onValue: '+e.message, false); }
+      });
+
+      onValue(ref(db,'friendships/'+me),(snap)=>{
+        try{
+          const f=snap.val()||{}; const arr=Object.keys(f);
+          friends.innerHTML = arr.length ? arr.map(u=>`
+            <div class="row sb"><div>@${u}</div><button class="btn primary" data-open="${u}">Message</button></div>`).join('')
+            : '<div class="mono">No friends yet.</div>';
+          log('Loaded friends list');
+        } catch(e){ console.error(e); log('friends onValue: '+e.message, false); }
+      });
+    }
+
+    async function sendRequest(){
+      try{
+        const target=(find.value||'').trim().toLowerCase();
+        if(!target||!me) return;
+        const s=await get(child(ref(db),'users/'+target));
+        if(!s.exists()) { alert('User not found.'); return; }
+        await set(ref(db,'requests/'+target+'/'+me), { status:'pending', ts:t() });
+        log('Sent request to '+target);
+        find.value='';
+      } catch(e){ console.error(e); log('sendRequest: '+e.message, false); }
+    }
+
+    async function accept(from){
+      try{
+        await update(ref(db), {
+          ['requests/'+me+'/'+from+'/status']:'accepted',
+          ['friendships/'+me+'/'+from]:true,
+          ['friendships/'+from+'/'+me]:true
+        });
+        log('Accepted request from '+from);
+      } catch(e){ console.error(e); log('accept: '+e.message, false); }
+    }
+
+    async function decline(from){
+      try{
+        await update(ref(db), { ['requests/'+me+'/'+from+'/status']:'declined' });
+        log('Declined request from '+from);
+      } catch(e){ console.error(e); log('decline: '+e.message, false); }
+    }
+
+    function openChat(p){
+      peer=p; chatWith.textContent='@'+p; chatArea.innerHTML='';
+      onValue(ref(db,'messages/'+tid(me,p)),(snap)=>{
+        try{
+          const msgs=snap.val()||{}; const arr=Object.values(msgs).sort((a,b)=>a.ts-b.ts);
+          chatArea.innerHTML = arr.map(m=>`
+            <div class="card" style="background:${m.from===me?'#0f1730':'#0c142b'}">
+              <div class="mono">@${m.from}</div>
+              <div>${m.text}</div>
+            </div>`).join('');
+        } catch(e){ console.error(e); log('openChat onValue: '+e.message, false); }
+      });
+      log('Opened chat with '+p);
+    }
+
+    async function sendMessage(){
+      try{
+        const text=(msg.value||'').trim();
+        if(!text||!peer) return;
+        await push(ref(db,'messages/'+tid(me,peer)), { from: me, to: peer, text, ts: t() });
+        msg.value='';
+        log('Sent message to '+peer);
+      } catch(e){ console.error(e); log('sendMessage: '+e.message, false); }
+    }
+
+    async function selftest(){
+      try{
+        const testKey='__selftest__/'+Math.random().toString(36).slice(2);
+        await set(ref(db,testKey), { ts:t(), hello:'world' });
+        const s=await get(ref(db,testKey));
+        if(s.exists()){ log('Self‑test write/read OK: '+testKey); }
+        else { log('Self‑test read failed', false); }
+      } catch(e){ console.error(e); log('Self‑test: '+e.message, false); }
+    }
+
+    // Events
+    $('#claim').addEventListener('click', claimUsername);
+    $('#sendReq').addEventListener('click', sendRequest);
+    $('#send').addEventListener('click', sendMessage);
+    $('#msg').addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMessage(); }});
+    document.body.addEventListener('click', (e)=>{
+      const a=e.target.getAttribute('data-accept'); if(a) return accept(a);
+      const d=e.target.getAttribute('data-decline'); if(d) return decline(d);
+      const o=e.target.getAttribute('data-open'); if(o) return openChat(o);
+    });
+    $('#selftest').addEventListener('click', selftest);
+
+    // Auto-claim from URL
+    const params = new URLSearchParams(location.search);
+    const u = (params.get('u')||'').trim().toLowerCase();
+    if(u){ $('#me').value=u; claimUsername(); }
+  </script>
+</body>
+</html>
