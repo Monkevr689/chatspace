@@ -1,3 +1,5 @@
+
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -19,6 +21,7 @@
   .left,.right{display:flex;gap:8px;align-items:center}
   .btn{padding:8px 12px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--text);cursor:pointer}
   .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.danger{background:#fee2e2;border-color:#fecaca;color:#991b1b}
   .wrap{max-width:1100px;margin:0 auto;padding:12px}
   .row{display:flex;gap:8px;align-items:center}
   .col{display:flex;flex-direction:column;gap:10px}
@@ -27,14 +30,21 @@
   @media(max-width:900px){.grid{grid-template-columns:1fr}}
   .input, textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--text)}
   .list>*+*{border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
-  #chat{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto}
-  .bubble{border:1px solid var(--border);background:var(--bubble);border-radius:12px;padding:10px}
+  #chat{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto;scroll-behavior:smooth}
+  .bubble{border:1px solid var(--border);background:var(--bubble);border-radius:12px;padding:10px;position:relative}
   .me{background:var(--me)}
   .muted{color:var(--muted)} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
   .userItem{display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid var(--border);border-radius:10px}
   img.msg{max-width:260px;border-radius:10px;display:block;margin-top:6px}
   .tiny{font-size:12px;color:var(--muted)}
   .pill{padding:2px 6px;border-radius:6px;border:1px solid var(--border);margin-left:6px}
+  .actions{display:flex;gap:6px;margin-top:6px}
+  .reacts{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .chip{border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:12px}
+  .reply{border-left:3px solid var(--border);padding-left:8px;margin:6px 0 4px;color:var(--muted);font-size:13px}
+  .preview{opacity:.9}
+  .inline{display:inline-flex;gap:6px;align-items:center}
+  .avatar{width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid var(--border)}
 </style>
 </head>
 <body>
@@ -47,7 +57,7 @@
     </div>
     <div class="right">
       <button id="themeBtn" class="btn">🌓 Theme: <span id="themeName">Light</span></button>
-      <button id="soundBtn" class="btn">🔊 Sound: <span id="soundState">On</span></button>
+      <button id="soundBtn" class="btn">🔊 <span id="soundState">On</span></button>
       <button id="notifBtn" class="btn">🔔 Notifications</button>
       <button id="testNotif" class="btn">✅ Test</button>
     </div>
@@ -57,18 +67,24 @@
 <div class="wrap col">
   <div id="status" class="tiny"></div>
 
-  <!-- identity -->
-  <div class="card">
+  <!-- identity + profile -->
+  <div class="card col">
     <div class="row">
       <input id="me" class="input" placeholder="username (e.g. alice)"/>
       <button id="claim" class="btn primary">Use</button>
       <span id="adminBadge" class="tiny pill"></span>
       <span class="tiny">Share: <span id="share" class="mono"></span></span>
     </div>
+    <div class="row">
+      <input id="dispName" class="input" placeholder="display name (optional)"/>
+      <input id="avatarFile" type="file" accept="image/*"/>
+      <button id="saveProfile" class="btn">Save profile</button>
+      <span class="tiny">Profile is shown in chat bubbles.</span>
+    </div>
   </div>
 
   <div class="grid">
-    <!-- left: requests + friends + users -->
+    <!-- left -->
     <div class="col">
       <div class="card">
         <div class="row">
@@ -88,6 +104,14 @@
       </div>
 
       <div class="card">
+        <h3 style="margin:0 6px 6px 0" class="inline">
+          Messages Search
+          <input id="searchBox" class="input" placeholder="filter current chat…" style="max-width:180px"/>
+        </h3>
+        <div class="tiny">Search is local to the open conversation.</div>
+      </div>
+
+      <div class="card">
         <h3 style="margin:0 0 6px">Registered Users</h3>
         <div id="registered" class="col"></div>
         <div class="tiny">As <b>tosh1</b> you can delete users.</div>
@@ -98,13 +122,25 @@
     <div class="col">
       <div class="card col">
         <div class="row" style="justify-content:space-between">
-          <div>Chatting with <span id="peer" class="mono">—</span></div>
+          <div class="inline">
+            <img id="peerAvatar" class="avatar" alt="">
+            <div>Chatting with <span id="peer" class="mono">—</span>
+              <span id="peerDisp" class="pill tiny"></span>
+            </div>
+          </div>
+          <div id="typing" class="tiny muted"></div>
         </div>
 
         <div id="chat"></div>
 
-        <!-- image PREVIEW bubble (local only, not sent yet) -->
-        <div id="previewWrap" class="bubble" style="display:none;opacity:0.9">
+        <!-- reply preview -->
+        <div id="replyBar" class="reply" style="display:none">
+          Replying to <span id="replyMeta"></span>
+          <button id="cancelReply" class="btn tiny" style="margin-left:8px">✕</button>
+        </div>
+
+        <!-- image PREVIEW bubble (local only) -->
+        <div id="previewWrap" class="bubble preview" style="display:none">
           <div class="muted mono">Preview (not sent)</div>
           <img id="previewImg" class="msg" alt="preview">
         </div>
@@ -118,7 +154,7 @@
             <button id="clearFile" class="btn">Clear preview</button>
           </div>
         </div>
-        <div class="tiny">Pick an image to **show it instantly** above as a preview. Press Send to upload & deliver.</div>
+        <div id="seenBar" class="tiny muted"></div>
       </div>
     </div>
   </div>
@@ -133,67 +169,89 @@ const app = initializeApp({ databaseURL: "https://my-chat-ddcd1-default-rtdb.fir
 const db = getDatabase(app);
 const storage = getStorage(app);
 
-// ===== Theme, Sound, Notifications (top bar) =====
-const root = document.documentElement;
-const themeBtn = document.querySelector('#themeBtn');
-const themeName = document.querySelector('#themeName');
-const savedTheme = localStorage.getItem('cs_theme') || 'light';
-applyTheme(savedTheme);
-function applyTheme(th){ root.setAttribute('data-theme', th==='dark'?'dark':'light'); themeName.textContent = th==='dark'?'Dark':'Light'; localStorage.setItem('cs_theme', th); }
-themeBtn.onclick = ()=> applyTheme(root.getAttribute('data-theme')==='dark' ? 'light' : 'dark');
+// ===== Theme / Sound / Notifications =====
+const root=document.documentElement, themeBtn=$('#themeBtn'), themeName=$('#themeName');
+applyTheme(localStorage.getItem('cs_theme')||'light');
+function applyTheme(th){ root.setAttribute('data-theme', th==='dark'?'dark':'light'); themeName.textContent=th==='dark'?'Dark':'Light'; localStorage.setItem('cs_theme', th); }
+themeBtn.onclick=()=>applyTheme(root.getAttribute('data-theme')==='dark'?'light':'dark');
 
-let soundOn = (localStorage.getItem("cs_sound")||"on")==="on";
-const soundState=document.querySelector("#soundState");
-document.querySelector("#soundBtn").onclick=()=>{ soundOn=!soundOn; localStorage.setItem("cs_sound",soundOn?"on":"off"); soundState.textContent=soundOn?"On":"Off"; if(soundOn){ ensureAudio(); ding(); } };
-soundState.textContent = soundOn ? "On" : "Off";
+let soundOn=(localStorage.getItem("cs_sound")||"on")==="on";
+$('#soundState').textContent = soundOn?"On":"Off";
+$('#soundBtn').onclick=()=>{ soundOn=!soundOn; localStorage.setItem("cs_sound",soundOn?"on":"off"); $('#soundState').textContent=soundOn?"On":"Off"; if(soundOn){ ensureAudio(); ding(); } };
 let audioCtx=null; function ensureAudio(){ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch{} } if(audioCtx&&audioCtx.state==="suspended"){ audioCtx.resume(); } }
 function ding(){ if(!soundOn) return; ensureAudio(); if(!audioCtx) return; const c=audioCtx; let s=c.currentTime; [[660,0.18],[990,0.28]].forEach(([f,d])=>{ const o=c.createOscillator(), g=c.createGain(); o.type="square"; o.frequency.setValueAtTime(f,s); g.gain.setValueAtTime(0.0001,s); g.gain.exponentialRampToValueAtTime(0.22,s+0.02); g.gain.exponentialRampToValueAtTime(0.0001,s+d); o.connect(g).connect(c.destination); o.start(s); o.stop(s+d+0.01); s+=d+0.02;}); }
 window.addEventListener("click", ensureAudio, { once:true });
 
-const notifBtn=document.querySelector('#notifBtn');
-const testBtn=document.querySelector('#testNotif');
-notifBtn.onclick = async ()=>{ if(!("Notification" in window)) return alert("No Notification support"); const p=await Notification.requestPermission(); if(p!=="granted") alert("Allow notifications in your browser settings."); else new Notification("Notifications enabled 🎉"); };
-testBtn.onclick = ()=>{ if("Notification" in window && Notification.permission==="granted"){ new Notification("Test notification", { body:"It works!" }); } else alert("Enable notifications first."); };
+$('#notifBtn').onclick = async ()=>{ if(!("Notification" in window)) return alert("No Notifications support"); const p=await Notification.requestPermission(); if(p!=="granted") alert("Allow notifications"); else new Notification("Notifications enabled 🎉"); };
+$('#testNotif').onclick = ()=>{ if("Notification" in window && Notification.permission==="granted"){ new Notification("Test notification",{body:"DM notifications working"}); } else alert("Enable notifications first."); };
 
 // ===== helpers =====
 const $=s=>document.querySelector(s), t=()=>Date.now(), tid=(a,b)=>[a,b].sort().join("__");
 const esc=s=>(s||"").replace(/[<>&]/g,m=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[m]));
-const info=m=>{const el=$("#status"); el.textContent=m; setTimeout(()=>el.textContent="",2200);};
+function info(m){ const el=$("#status"); el.textContent=m; setTimeout(()=>el.textContent="",2400); }
+function fmtTime(ts){ const d=new Date(ts||Date.now()); return d.toLocaleTimeString(); }
 
 // els
 const meBox=$("#me"), claim=$("#claim"), share=$("#share"), adminBadge=$("#adminBadge");
+const dispName=$("#dispName"), avatarFile=$("#avatarFile"), saveProfile=$("#saveProfile");
 const incoming=$("#incoming"), friends=$("#friends"), registered=$("#registered");
-const peerEl=$("#peer"), chat=$("#chat"), msg=$("#msg"), send=$("#send");
+const peerEl=$("#peer"), peerDisp=$("#peerDisp"), peerAvatar=$("#peerAvatar");
+const chat=$("#chat"), msg=$("#msg"), send=$("#send");
 const file=$("#file"), clearFile=$("#clearFile"), previewWrap=$("#previewWrap"), previewImg=$("#previewImg");
-const findUser=$("#findUser"), sendReq=$("#sendReq");
+const findUser=$("#findUser"), sendReq=$("#sendReq"), searchBox=$("#searchBox");
+const typingEl=$("#typing"), replyBar=$("#replyBar"), replyMeta=$("#replyMeta"), cancelReply=$("#cancelReply"), seenBar=$("#seenBar");
 
-let me=null, admin=false, currentPeer=null, dmRef=null, dmCb=null;
+let me=null, admin=false, currentPeer=null, dmRef=null, dmCb=null, reactionsRef=null, reactionsCb=null;
+let profilesCache = {}; // username -> {displayName, avatarUrl}
+let replyTo = null;     // {id, from, text}
+let currentMessages = []; // cache for search
+let peerReadTs = 0;
 
 // presence
 async function presence(){
   if(!me) return;
   const p=ref(db,'presence/'+me);
-  await set(p,{online:true,lastSeen:serverTimestamp()});
-  onDisconnect(p).set({online:false,lastSeen:serverTimestamp()});
+  await set(p,{online:true,lastSeen: serverTimestamp()});
+  onDisconnect(p).set({online:false,lastSeen: serverTimestamp()});
   setInterval(()=>update(p,{online:true,lastSeen:serverTimestamp()}),30000);
 }
 
+// profiles
+async function loadProfile(u){
+  if(profilesCache[u]) return profilesCache[u];
+  const s = await get(child(ref(db),'profiles/'+u));
+  profilesCache[u] = s.val() || {};
+  return profilesCache[u];
+}
+async function saveMyProfile(){
+  const dn = (dispName.value||'').trim();
+  let avatarUrl = profilesCache[me]?.avatarUrl || null;
+  if(avatarFile.files && avatarFile.files[0]){
+    const f=avatarFile.files[0]; const path=`avatars/${me}_${Date.now()}_${f.name.replace(/\s+/g,'_')}`;
+    const upRef=sref(storage, path); await uploadBytes(upRef,f); avatarUrl = await getDownloadURL(upRef);
+  }
+  await set(ref(db,'profiles/'+me), { displayName: dn || null, avatarUrl: avatarUrl || null, updatedAt:t() });
+  profilesCache[me] = { displayName: dn || null, avatarUrl: avatarUrl || null };
+  info('Profile saved');
+}
+saveProfile.onclick=saveMyProfile;
+
+// identity
 async function use(){
   const u=(meBox.value||'').trim().toLowerCase(); if(!u) return;
   const s=await get(child(ref(db),'users/'+u)); if(!s.exists()) await set(ref(db,'users/'+u),{createdAt:t()});
-  me=u; admin=(me==='tosh1');
-  localStorage.setItem("cs_username",me);
+  me=u; admin=(me==='tosh1'); localStorage.setItem("cs_username",me);
   history.replaceState({},'',location.pathname+'?u='+me);
   share.textContent=location.origin+location.pathname+'?u='+me;
   adminBadge.textContent = admin ? 'Admin: tosh1' : '';
+  await loadProfile(me);
   info('Using @'+me+(admin?' (admin)':''));
-  presence();
-  lists(); watchUsers();
+  presence(); lists(); watchUsers();
 }
 claim.onclick=use;
 const saved=(localStorage.getItem("cs_username")||"").trim(); if(saved){ meBox.value=saved; use(); }
 
-// lists
+// lists (requests/friends)
 function lists(){
   if(!me) return;
   let prev=0;
@@ -219,81 +277,178 @@ function lists(){
   });
 }
 
+// users list
 function watchUsers(){
-  onValue(ref(db,'users'), (su)=>{
+  onValue(ref(db,'users'), async (su)=>{
     const users=su.val()||{};
-    registered.innerHTML = Object.keys(users).sort().map(u=>`
-      <div class="userItem">
-        <span>@${esc(u)}</span>
+    const names = Object.keys(users).sort();
+    // preload minimal profiles
+    await Promise.all(names.map(n=>loadProfile(n)));
+    registered.innerHTML = names.map(u=>{
+      const p=profilesCache[u]||{};
+      const tag = p.displayName ? ` — ${esc(p.displayName)}` : '';
+      return `<div class="userItem">
+        <span>@${esc(u)}<span class="tiny">${tag}</span></span>
         <div class="row">
           <button class="btn" data-add="${esc(u)}">Add</button>
           ${admin && u!=='tosh1' ? `<button class="btn danger" data-deluser="${esc(u)}">Delete</button>`:''}
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   });
 }
 
-// local IMAGE PREVIEW (not sent)
+// typing indicator
+let typingTimer=null;
+function setTyping(is){
+  if(!currentPeer) return;
+  set(ref(db,'typing/'+tid(me,currentPeer)+'/'+me), !!is);
+  if(is){
+    clearTimeout(typingTimer);
+    typingTimer=setTimeout(()=>set(ref(db,'typing/'+tid(me,currentPeer)+'/'+me), false), 2500);
+  }
+}
+msg.addEventListener('input',()=>setTyping(true));
+
+// reply bar
+function setReply(m){
+  replyTo = m ? { id:m.id, from:m.from, text:(m.text||'') } : null;
+  if(replyTo){
+    replyMeta.textContent = `@${replyTo.from}: ${replyTo.text.slice(0,80)}`;
+    replyBar.style.display = 'block';
+  }else{
+    replyBar.style.display = 'none';
+  }
+}
+cancelReply.onclick=()=>setReply(null);
+
+// local IMAGE PREVIEW
 file.addEventListener('change', ()=>{
   if(file.files && file.files[0]){
     const url = URL.createObjectURL(file.files[0]);
     previewImg.src = url;
     previewWrap.style.display = 'block';
-  } else {
-    previewWrap.style.display = 'none';
-    previewImg.removeAttribute('src');
-  }
+  } else { previewWrap.style.display='none'; previewImg.removeAttribute('src'); }
 });
-clearFile.onclick = ()=>{ file.value=''; previewWrap.style.display='none'; previewImg.removeAttribute('src'); };
+clearFile.onclick=()=>{ file.value=''; previewWrap.style.display='none'; previewImg.removeAttribute('src'); };
 
-// dm open/render
-function render(arr){
-  chat.innerHTML = arr.map(m=>`
-    <div class="bubble ${m.from===me?'me':''}">
-      <div class="muted mono">@${esc(m.from)}</div>
-      ${m.text?`<div>${esc(m.text)}</div>`:''}
-      ${m.imageUrl?`<img class="msg" src="${esc(m.imageUrl)}" alt="image">`:''}
-      ${(admin||m.from===me)?`<button class="btn tiny" data-del="${esc(m.id)}">🗑</button>`:''}
-    </div>`).join('');
+// render helpers
+function profileTag(u){
+  const p=profilesCache[u]||{};
+  return p.displayName ? ` <span class="tiny pill">${esc(p.displayName)}</span>` : '';
+}
+function avatarUrlOf(u){ return (profilesCache[u] && profilesCache[u].avatarUrl) || ''; }
+
+function render(arr, reactions){
+  currentMessages = arr;
+  const filt = (searchBox.value||'').toLowerCase();
+  const peerSeenTs = peerReadTs || 0;
+
+  chat.innerHTML = arr
+    .filter(m=>{
+      if(!filt) return true;
+      const hay = (m.text||'') + ' ' + (m.replyTo?.text||'');
+      return hay.toLowerCase().includes(filt);
+    })
+    .map(m=>{
+      const owns = m.from===me; const canDel = owns || admin;
+      const rs = reactions[m.id]||{};
+      const tally = (emoji)=> Object.keys(rs[emoji]||{}).length;
+      const youReacted = (emoji)=> !!(rs[emoji] && rs[emoji][me]);
+
+      const replyHtml = m.replyTo ? `<div class="reply tiny">@${esc(m.replyTo.from)}: ${esc(m.replyTo.text||'')}</div>` : '';
+      const seenMark = (!owns || !m.ts) ? '' : (peerSeenTs>=m.ts ? `<span class="tiny muted">Seen</span>`:'');
+      const edited = m.edited ? `<span class="tiny muted"> (edited)</span>` : '';
+
+      const av = avatarUrlOf(m.from);
+      return `<div class="bubble ${owns?'me':''}" data-id="${esc(m.id)}">
+        <div class="inline">
+          ${av ? `<img class="avatar" src="${esc(av)}" alt="">` : `<span class="avatar" style="background:#ddd"></span>`}
+          <div class="muted mono">@${esc(m.from)}</div>${profileTag(m.from)} <span class="tiny muted">• ${fmtTime(m.ts)}</span>
+        </div>
+        ${replyHtml}
+        ${m.text?`<div>${esc(m.text)}${edited}</div>`:''}
+        ${m.imageUrl?`<img class="msg" src="${esc(m.imageUrl)}" alt="image">`:''}
+
+        <div class="actions">
+          <button class="btn tiny" data-reply="${esc(m.id)}">↩ Reply</button>
+          <button class="btn tiny" data-react="${esc(m.id)}" data-emoji="👍">${youReacted('👍')?'✅':''} 👍 ${tally('👍')||''}</button>
+          <button class="btn tiny" data-react="${esc(m.id)}" data-emoji="❤️">${youReacted('❤️')?'✅':''} ❤️ ${tally('❤️')||''}</button>
+          <button class="btn tiny" data-react="${esc(m.id)}" data-emoji="😂">${youReacted('😂')?'✅':''} 😂 ${tally('😂')||''}</button>
+          ${owns?`<button class="btn tiny" data-edit="${esc(m.id)}">✏ Edit</button>`:''}
+          ${canDel?`<button class="btn tiny" data-del="${esc(m.id)}">🗑</button>`:''}
+          <span style="flex:1"></span>${seenMark}
+        </div>
+      </div>`;
+    }).join('');
   chat.scrollTop = chat.scrollHeight;
 }
 
-function openDM(peer){
+// open DM
+let typingUnsub=null, readsUnsub=null, reactionsUnsub=null;
+async function openDM(peer){
   currentPeer=peer; peerEl.textContent='@'+peer; chat.innerHTML='';
-  if(dmRef && dmCb) off(dmRef, dmCb);
-  let last=0;
+  const pp = await loadProfile(peer); peerDisp.textContent = pp.displayName? '• '+pp.displayName : ''; peerAvatar.src = pp.avatarUrl||'';
+  if(dmRef&&dmCb) off(dmRef, dmCb); if(typingUnsub) off(typingUnsub.ref, typingUnsub.cb); if(readsUnsub) off(readsUnsub.ref, readsUnsub.cb); if(reactionsUnsub) off(reactionsUnsub.ref, reactionsUnsub.cb);
+
+  // messages
   dmRef = ref(db,'messages/'+tid(me,peer));
+  let last=0;
   dmCb = (snap)=>{
     const d=snap.val()||{}; const arr=Object.entries(d).map(([id,m])=>({id,...m})).sort((a,b)=>a.ts-b.ts);
     if(arr.length>last){
       const L=arr[arr.length-1]; if(L && L.from!==me){ ding(); if("Notification" in window && Notification.permission==="granted"){ new Notification("New message from @"+L.from,{body:L.text||'Photo'}); } }
     }
-    last=arr.length; render(arr);
+    last=arr.length;
+    // update my read receipt to last message ts
+    const lastTs = arr.length? arr[arr.length-1].ts : 0;
+    if(lastTs) set(ref(db,'reads/'+tid(me,peer)+'/'+me), lastTs);
+    render(arr, cachedReactions);
   };
   onValue(dmRef, dmCb);
-}
 
+  // typing watcher (peer typing)
+  const typRef = ref(db,'typing/'+tid(me,peer)+'/'+peer);
+  const typCb = s=> typingEl.textContent = s.val()? `@${peer} is typing…` : '';
+  onValue(typRef, typCb); typingUnsub={ref:typRef, cb:typCb};
+
+  // peer read receipts
+  const rdRef = ref(db,'reads/'+tid(me,peer)+'/'+peer);
+  const rdCb = s=>{ peerReadTs = s.val()||0; render(currentMessages, cachedReactions); };
+  onValue(rdRef, rdCb); readsUnsub={ref:rdRef, cb:rdCb};
+
+  // reactions cache
+  const reactRef = ref(db,'reactions/'+tid(me,peer));
+  const rCb = s=>{ cachedReactions = s.val()||{}; render(currentMessages, cachedReactions); };
+  onValue(reactRef, rCb); reactionsUnsub={ref:reactRef, cb:rCb};
+}
+let cachedReactions = {};
+
+// send
 async function sendMsg(){
   if(!currentPeer) return;
   const text=(msg.value||'').trim();
   let imageUrl=null;
   if(file.files && file.files[0]){
-    // upload then we’ll clear preview
     const f=file.files[0];
     const path=`uploads/${me}/${Date.now()}_${f.name.replace(/\s+/g,'_')}`;
     const upRef=sref(storage, path);
     await uploadBytes(upRef, f);
     imageUrl = await getDownloadURL(upRef);
   }
-  if(!text && !imageUrl) return;
-  await push(ref(db,'messages/'+tid(me,currentPeer)), { from: me, to: currentPeer, text, imageUrl, ts:t() });
-  msg.value='';
-  if(imageUrl){ file.value=''; previewWrap.style.display='none'; previewImg.removeAttribute('src'); }
+  if(!text && !imageUrl && !replyTo) return;
+  await push(ref(db,'messages/'+tid(me,currentPeer)), { from: me, to: currentPeer, text, imageUrl, ts:t(), ...(replyTo?{replyTo}:{}) });
+  msg.value=''; if(imageUrl){ file.value=''; previewWrap.style.display='none'; previewImg.removeAttribute('src'); }
+  setReply(null);
+  setTyping(false);
 }
 send.onclick=sendMsg;
 msg.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMsg(); } });
 
-// actions
+// search
+searchBox.addEventListener('input', ()=>render(currentMessages, cachedReactions));
+
+// actions (friend reqs, open, react, edit, delete, reply)
 async function addFriend(u){
   if(!me) return;
   const s=await get(child(ref(db),'users/'+u)); if(!s.exists()) return alert('User not found');
@@ -307,33 +462,29 @@ async function accept(u){
 }
 async function decline(u){ await update(ref(db),{['requests/'+me+'/'+u+'/status']:'declined'}); info('Declined.'); }
 async function delMsg(id){ if(!currentPeer) return; await remove(ref(db,'messages/'+tid(me,currentPeer)+'/'+id)); }
-async function delUser(u){
-  if(!(me==='tosh1')||u==='tosh1') return;
-  if(!confirm(`Delete @${u}?`)) return;
-  const [friendsSnap, groupsSnap, requestsSnap, messagesSnap]=await Promise.all([
-    get(child(ref(db),'friendships/'+u)), get(child(ref(db),'user_groups/'+u)),
-    get(child(ref(db),'requests')), get(child(ref(db),'messages'))
-  ]);
-  const updates={};
-  updates['users/'+u]=null; updates['presence/'+u]=null; updates['requests/'+u]=null;
-  const reqAll=requestsSnap.val()||{}; Object.keys(reqAll).forEach(target=>{ if(reqAll[target]?.[u]) updates['requests/'+target+'/'+u]=null; });
-  const fr=friendsSnap.val()||{}; Object.keys(fr).forEach(p=>{ updates['friendships/'+u+'/'+p]=null; updates['friendships/'+p+'/'+u]=null; });
-  const msgsRoot=messagesSnap.val()||{}; Object.keys(msgsRoot).forEach(k=>{ if(k.split('__').includes(u)) updates['messages/'+k]=null; });
-  const ug=groupsSnap.val()||{}; Object.keys(ug).forEach(g=>{ updates['group_members/'+g+'/'+u]=null; });
-  updates['user_groups/'+u]=null;
-  await update(ref(db), updates);
-  info('@'+u+' deleted');
+async function reactMsg(id, emoji){
+  const path='reactions/'+tid(me,currentPeer)+'/'+id+'/'+emoji+'/'+me;
+  const cur=await get(child(ref(db), path));
+  await set(ref(db, path), cur.exists()? null : true);
 }
-
+async function editMsg(id){
+  const node = await get(child(ref(db),'messages/'+tid(me,currentPeer)+'/'+id));
+  const m=node.val(); if(!m || m.from!==me) return;
+  const text = prompt("Edit message:", m.text||""); if(text===null) return;
+  await update(ref(db,'messages/'+tid(me,currentPeer)+'/'+id), { text, edited:true });
+}
 document.body.addEventListener('click',(e)=>{
   const o=e.target.getAttribute('data-open'); if(o){ openDM(o); return; }
   const a=e.target.getAttribute('data-accept'); if(a){ accept(a); return; }
   const d=e.target.getAttribute('data-decline'); if(d){ decline(d); return; }
   const add=e.target.getAttribute('data-add'); if(add){ addFriend(add); return; }
   const del=e.target.getAttribute('data-del'); if(del){ delMsg(del); return; }
-  const du=e.target.getAttribute('data-deluser'); if(du){ delUser(du); return; }
+  const ed=e.target.getAttribute('data-edit'); if(ed){ editMsg(ed); return; }
+  const rp=e.target.getAttribute('data-reply'); if(rp){ const m=currentMessages.find(x=>x.id===rp); if(m) setReply(m); return; }
+  const rx=e.target.getAttribute('data-react'); if(rx){ const em=e.target.getAttribute('data-emoji'); reactMsg(rx, em); return; }
 });
 sendReq.onclick=async()=>{ const u=(findUser.value||'').trim().toLowerCase(); if(u) addFriend(u); };
 </script>
 </body>
 </html>
+
