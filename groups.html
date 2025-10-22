@@ -1,103 +1,106 @@
 <!doctype html>
-<html lang="en"><head>
+<html lang="en">
+<head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>ChatSpace — Groups (Admin + Long Ding)</title>
+<title>ChatSpace — Groups</title>
 <style>
-  :root{--bg:#f7f7f8;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--accent:#3b82f6;--danger:#ef4444}
-  *{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Arial;background:var(--bg);color:var(--text)}
-  header{background:#fff;border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+  :root{--bg:#f6f7fb;--card:#fff;--border:#e6e8ef;--text:#0f172a;--muted:#64748b;--accent:#3b82f6;--danger:#ef4444}
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,Segoe UI,Arial;background:var(--bg);color:var(--text)}
+  header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
   .nav a{margin-left:8px;text-decoration:none;padding:8px 12px;border:1px solid var(--border);border-radius:999px;color:var(--text)}
   .nav a.active{background:var(--accent);border-color:var(--accent);color:#fff}
-  .wrap{max-width:1180px;margin:0 auto;padding:14px}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;margin:10px 0}
-  .row{display:flex;align-items:center;gap:8px}.row.end{justify-content:flex-end}
-  .input{padding:8px 10px;border-radius:10px;border:1px solid var(--border);flex:1}
-  .btn{padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:#fff;cursor:pointer}
-  .btn.primary{background:var(--accent);color:#fff;border:none}
+  .wrap{max-width:1100px;margin:0 auto;padding:12px}
+  .row{display:flex;gap:8px;align-items:center}
+  .col{display:flex;flex-direction:column;gap:10px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px}
+  .leftRight{display:grid;grid-template-columns:320px 1fr;gap:12px}
+  @media(max-width:900px){.leftRight{grid-template-columns:1fr}}
+  .input, textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px}
+  .btn{padding:8px 12px;border:1px solid var(--border);border-radius:999px;background:#fff;cursor:pointer}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   .btn.danger{background:#fee2e2;border-color:#fecaca;color:#991b1b}
-  .grid{display:grid;grid-template-columns:320px 1fr 320px;gap:12px}
-  @media(max-width:1100px){.grid{grid-template-columns:1fr}}
   .list>*+*{border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
-  .bubble{border:1px solid var(--border);border-radius:10px;padding:8px;background:#fff;position:relative}
-  .bubble .del{position:absolute;top:6px;right:6px}
-  #groupMessages{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto}
+  #gchat{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto}
+  .bubble{border:1px solid var(--border);background:#fff;border-radius:12px;padding:10px;position:relative}
   .me{background:#eef2ff}
-  .userItem{display:flex;align-items:center;justify-content:space-between;padding:8px;border:1px solid var(--border);border-radius:10px}
   .muted{color:var(--muted)} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  .userItem{display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid var(--border);border-radius:10px}
+  img.msg{max-width:240px;border-radius:10px;display:block;margin-top:6px}
+  .tiny{font-size:12px;color:var(--muted)}
 </style>
-</head><body>
+</head>
+<body>
 <header>
   <strong>ChatSpace — Groups</strong>
-  <div class="row">
-    <span id="adminBadge" class="muted"></span>
-    <button id="toggleSound" class="btn">🔊 Sound: <span id="soundState">On</span></button>
-    <button id="enablePush" class="btn">🔔 Enable desktop notifications</button>
-    <nav class="nav">
-      <a href="./messages.html">💬 Messages</a>
-      <a class="active" href="./groups.html">👥 Groups</a>
-    </nav>
+  <div class="nav">
+    <a href="./messages.html">💬 Messages</a>
+    <a class="active" href="./groups.html">👥 Groups</a>
   </div>
 </header>
 
-<div class="wrap">
-  <div id="status" class="muted" style="margin:6px 0;"></div>
+<div class="wrap col">
+  <div id="status" class="tiny"></div>
 
+  <!-- identity -->
   <div class="card">
     <div class="row">
-      <input id="me" class="input" placeholder="choose a username (e.g. alice)">
-      <button id="claim" class="btn primary">Use / Claim</button>
-      <div class="muted mono">Share: <span id="share"></span></div>
+      <input id="me" class="input" placeholder="username (e.g. alice)"/>
+      <button id="claim" class="btn primary">Use</button>
+      <span id="adminBadge" class="tiny"></span>
+      <span class="tiny">Share: <span id="share" class="mono"></span></span>
+      <button id="toggleSound" class="btn">🔊 <span id="soundState">On</span></button>
     </div>
   </div>
 
-  <div class="grid">
-    <!-- Left: create/join + my groups + members -->
-    <div>
+  <div class="leftRight">
+    <!-- left: create/open + my groups + members + users -->
+    <div class="col">
       <div class="card">
-        <h3>Create / Join</h3>
-        <div class="row"><input id="groupName" class="input" placeholder="group name (e.g. class7)"></div>
-        <div class="row" style="margin-top:8px">
-          <input id="groupUsers" class="input" placeholder="initial members (comma-separated)">
-          <button id="createGroup" class="btn primary">Create / Add</button>
+        <div class="row"><input id="gname" class="input" placeholder="group name (e.g. class7)"/></div>
+        <div class="row"><input id="ginit" class="input" placeholder="initial members (comma, optional)"/></div>
+        <div class="row"><button id="gcreate" class="btn primary">Create / Join</button></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 6px">My Groups</h3>
+        <div id="myGroups" class="list tiny"></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 6px">Members of <span id="gMono" class="mono">—</span></h3>
+        <div id="members" class="list tiny"></div>
+        <div class="row"><input id="adders" class="input" placeholder="add members (comma)"/></div>
+        <div class="row">
+          <button id="addBtn" class="btn">Add Members</button>
+          <button id="leave" class="btn danger">Leave Group</button>
         </div>
       </div>
 
       <div class="card">
-        <h3>My Groups</h3>
-        <div id="myGroups" class="list"></div>
-      </div>
-
-      <div class="card">
-        <h3>Members of <span id="gNameMono" class="mono">—</span></h3>
-        <div id="members" class="list"></div>
-        <div class="row" style="margin-top:8px">
-          <input id="addMemberInput" class="input" placeholder="add members (comma-separated)">
-          <button id="addMemberBtn" class="btn">Add to Current Group</button>
-        </div>
-        <div class="row end" style="margin-top:8px">
-          <button id="leaveGroup" class="btn danger">Leave This Group</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Middle: group chat -->
-    <div>
-      <div class="card">
-        <h3>Group: <span id="activeGroup" class="mono">—</span></h3>
-        <div id="groupMessages"></div>
-        <div class="row end" style="margin-top:8px">
-          <textarea id="groupMsg" class="input" placeholder="Message the group… (Enter to send)"></textarea>
-          <button id="groupSend" class="btn primary">Send</button>
-        </div>
+        <h3 style="margin:0 0 6px">Registered Users</h3>
+        <div id="registered" class="col"></div>
+        <div class="tiny">Click “Add to Group” to add to the open group. (As <b>tosh1</b> you can delete users.)</div>
       </div>
     </div>
 
-    <!-- Right: Registered Users (Add to Group + Admin Delete User) -->
-    <div>
-      <div class="card">
-        <h3>Registered Users</h3>
-        <div id="registeredUsers" class="list"></div>
-        <p class="muted" style="margin-top:6px">As <b>tosh1</b> you’ll also see a Delete User button.</p>
+    <!-- right: chat -->
+    <div class="col">
+      <div class="card col">
+        <div class="row" style="justify-content:space-between">
+          <div>Group <span id="gtitle" class="mono">—</span></div>
+        </div>
+        <div id="gchat"></div>
+
+        <!-- composer -->
+        <div class="row"><textarea id="gmsg" placeholder="Message the group… (Enter to send)"></textarea></div>
+        <div class="row" style="justify-content:space-between">
+          <input id="gfile" type="file" accept="image/*"/>
+          <div class="row">
+            <button id="gsend" class="btn primary">Send</button>
+            <button id="gclear" class="btn">Clear file</button>
+          </div>
+        </div>
+        <div class="tiny">Images upload to Firebase Storage; link saved in RTDB.</div>
       </div>
     </div>
   </div>
@@ -106,249 +109,183 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
 import { getDatabase, ref, onValue, off, set, update, push, get, child, onDisconnect, serverTimestamp, remove } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
+import { getStorage, ref as sref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-storage.js";
 
 const app = initializeApp({ databaseURL: "https://my-chat-ddcd1-default-rtdb.firebaseio.com/" });
 const db = getDatabase(app);
+const storage = getStorage(app);
 
-// ====== SOUND (longer two-tone ding) + PUSH ======
-let soundEnabled = (localStorage.getItem("cs_sound")||"on") === "on";
-const soundStateEl = document.querySelector("#soundState");
-soundStateEl.textContent = soundEnabled ? "On" : "Off";
-let audioCtx = null;
-function ensureAudioCtx(){ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch{} } if(audioCtx&&audioCtx.state==="suspended"){ audioCtx.resume(); } }
-function dingLong(){
-  if(!soundEnabled) return; ensureAudioCtx(); if(!audioCtx) return;
-  const ctx=audioCtx;
-  const seq=[ {f:660,d:0.18}, {f:990,d:0.28} ];
-  let start=ctx.currentTime;
-  seq.forEach(({f,d})=>{
-    const o=ctx.createOscillator(), g=ctx.createGain();
-    o.type="square"; o.frequency.setValueAtTime(f,start);
-    g.gain.setValueAtTime(0.0001,start);
-    g.gain.exponentialRampToValueAtTime(0.22,start+0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001,start+d);
-    o.connect(g).connect(ctx.destination); o.start(start); o.stop(start+d+0.01);
-    start += d+0.02;
-  });
-}
-document.querySelector("#toggleSound").onclick=()=>{ soundEnabled=!soundEnabled; localStorage.setItem("cs_sound", soundEnabled?"on":"off"); soundStateEl.textContent=soundEnabled?"On":"Off"; if(soundEnabled){ ensureAudioCtx(); dingLong(); } };
-window.addEventListener("click", ensureAudioCtx, { once:true });
+// sound + notifications
+let soundOn=(localStorage.getItem("cs_sound")||"on")==="on";
+const soundState=document.querySelector("#soundState"); soundState.textContent=soundOn?"On":"Off";
+let audioCtx=null; function ensureAudio(){ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch{} } if(audioCtx&&audioCtx.state==="suspended"){ audioCtx.resume(); } }
+function ding(){ if(!soundOn) return; ensureAudio(); if(!audioCtx) return; const c=audioCtx; let s=c.currentTime; [[660,0.18],[990,0.28]].forEach(([f,d])=>{ const o=c.createOscillator(), g=c.createGain(); o.type="square"; o.frequency.setValueAtTime(f,s); g.gain.setValueAtTime(0.0001,s); g.gain.exponentialRampToValueAtTime(0.22,s+0.02); g.gain.exponentialRampToValueAtTime(0.0001,s+d); o.connect(g).connect(c.destination); o.start(s); o.stop(s+d+0.01); s+=d+0.02;});}
+document.querySelector("#toggleSound").onclick=()=>{ soundOn=!soundOn; localStorage.setItem("cs_sound",soundOn?"on":"off"); soundState.textContent=soundOn?"On":"Off"; if(soundOn){ ensureAudio(); ding(); } };
+window.addEventListener("click", ensureAudio, { once:true });
+async function ensureNotifications(){ if(!("Notification" in window)) return; if(Notification.permission==="default"){ try{ await Notification.requestPermission(); }catch{} } }
+function n(title, body){ if("Notification" in window && Notification.permission==="granted"){ new Notification(title,{ body }); } }
+ensureNotifications();
 
-const pushBtn = document.querySelector("#enablePush");
-pushBtn.onclick = async () => {
-  if(!("Notification" in window)) return alert("Notifications not supported.");
-  const perm = await Notification.requestPermission();
-  if(perm !== "granted") return;
-  new Notification("Desktop notifications enabled 🎉");
-};
-function notify(title, body){ if("Notification" in window && Notification.permission==="granted"){ new Notification(title, { body }); } }
-
-// ====== helpers ======
+// helpers
 const $=s=>document.querySelector(s), t=()=>Date.now();
-const esc = s => (s||"").replace(/[<>&]/g,m=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[m]));
-const info=m=>{const el=$("#status"); el.textContent=m; setTimeout(()=>el.textContent="",2500);};
+const esc=s=>(s||"").replace(/[<>&]/g,m=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[m]));
+const info=m=>{const el=$("#status"); el.textContent=m; setTimeout(()=>el.textContent="",2200);};
 
-// elements
-const meBox=$("#me"), claimBtn=$("#claim"), share=$("#share"), adminBadge=$("#adminBadge");
-const groupName=$("#groupName"), groupUsers=$("#groupUsers"), createGroup=$("#createGroup");
-const myGroups=$("#myGroups"), members=$("#members"), gNameMono=$("#gNameMono"), activeGroup=$("#activeGroup");
-const groupMessages=$("#groupMessages"), groupMsg=$("#groupMsg"), groupSend=$("#groupSend");
-const addMemberInput=$("#addMemberInput"), addMemberBtn=$("#addMemberBtn"), leaveGroupBtn=$("#leaveGroup");
-const regUsers=$("#registeredUsers");
+// els
+const meBox=$("#me"), claim=$("#claim"), share=$("#share"), adminBadge=$("#adminBadge");
+const gname=$("#gname"), ginit=$("#ginit"), gcreate=$("#gcreate");
+const myGroups=$("#myGroups"), members=$("#members"), gMono=$("#gMono"), gtitle=$("#gtitle");
+const gchat=$("#gchat"), gmsg=$("#gmsg"), gsend=$("#gsend"), gfile=$("#gfile"), gclear=$("#gclear");
+const adders=$("#adders"), addBtn=$("#addBtn"), leaveBtn=$("#leave");
+const registered=$("#registered");
 
-let me=null, isAdmin=false, gmRef=null, gmCb=null, memRef=null, memCb=null, currentGroup=null;
+let me=null, admin=false, curG=null, gmRef=null, gmCb=null, memRef=null, memCb=null;
 
-// Presence
-async function startPresence(){
+// presence
+async function presence(){
   if(!me) return;
-  const pRef = ref(db,'presence/'+me);
-  await set(pRef, { online:true, lastSeen: serverTimestamp() });
-  onDisconnect(pRef).set({ online:false, lastSeen: serverTimestamp() });
-  setInterval(()=>{ update(pRef,{online:true,lastSeen:serverTimestamp()}); }, 30000);
+  const p=ref(db,'presence/'+me);
+  await set(p,{online:true,lastSeen:serverTimestamp()});
+  onDisconnect(p).set({online:false,lastSeen:serverTimestamp()});
+  setInterval(()=>update(p,{online:true,lastSeen:serverTimestamp()}),30000);
 }
 
-async function useOrClaim(){
+async function use(){
   const u=(meBox.value||'').trim().toLowerCase(); if(!u) return;
-  const s=await get(child(ref(db),'users/'+u));
-  if(!s.exists()) await set(ref(db,'users/'+u), { createdAt:t() });
-  me=u; isAdmin=(me==='tosh1');
-  localStorage.setItem("cs_username",me);
+  const s=await get(child(ref(db),'users/'+u)); if(!s.exists()) await set(ref(db,'users/'+u),{createdAt:t()});
+  me=u; admin=(me==='tosh1'); localStorage.setItem("cs_username",me);
   history.replaceState({},'',location.pathname+'?u='+me);
   share.textContent=location.origin+location.pathname+'?u='+me;
-  adminBadge.textContent = isAdmin ? "Admin: tosh1" : "";
-  info("Using username: "+me+(isAdmin?" (admin)":""));
-  startPresence();
-  watchMyGroups(); watchUsers();
-  const last = localStorage.getItem("cs_last_group"); if(last) openGroup(last);
+  adminBadge.textContent=admin?'Admin: tosh1':'';
+  info('Using @'+me+(admin?' (admin)':''));
+  presence(); myList(); watchUsers(); ensureNotifications();
+  const last=localStorage.getItem("cs_last_group"); if(last) openG(last);
 }
-claimBtn.onclick=useOrClaim;
-const saved=(localStorage.getItem("cs_username")||'').trim(); if(saved){ meBox.value=saved; useOrClaim(); }
+claim.onclick=use;
+const saved=(localStorage.getItem("cs_username")||"").trim(); if(saved){ meBox.value=saved; use(); }
 
 // my groups
-function watchMyGroups(){
-  if(!me) return;
+function myList(){
   onValue(ref(db,'user_groups/'+me),(snap)=>{
-    const d=snap.val()||{}; const list=Object.keys(d).sort();
-    myGroups.innerHTML = list.length ? list.map(g=>`
-      <div class="userItem"><div>#${esc(g)}</div>
-      <button class="btn" data-open="${esc(g)}">Open</button></div>`).join('') : '<div class="muted">You are not in any groups yet.</div>';
+    const d=snap.val()||{}; const arr=Object.keys(d).sort();
+    myGroups.innerHTML = arr.length ? arr.map(g=>`
+      <div class="row"><span>#${esc(g)}</span><button class="btn" data-open="${esc(g)}">Open</button></div>
+    `).join('') : '<span class="muted">No groups yet</span>';
   });
 }
-
-// users + presence (Add to Group + Admin Delete User)
-function watchUsers(){
-  onValue(ref(db,'users'), (snapUsers)=>{
-    const allUsers=snapUsers.val()||{};
-    onValue(ref(db,'presence'), (snapP)=>{
-      const pres=snapP.val()||{};
-      const names=Object.keys(allUsers).sort();
-      regUsers.innerHTML = names.length ? names.map(u=>{
-        const online = pres[u]?.online ? ' (online)' : '';
-        return `<div class="userItem">
-          <div><strong>@${esc(u)}</strong><span class="muted">${online}</span></div>
-          <div class="row">
-            <button class="btn" data-add-to-group="${esc(u)}">Add to Group</button>
-            ${isAdmin && u!=='tosh1' ? `<button class="btn danger" data-del-user="${esc(u)}">Delete</button>`:''}
-          </div>
-        </div>`;
-      }).join('') : '<div class="muted">No registered users yet.</div>';
-    });
-  });
+async function create(){
+  if(!me) return info('Use a username first.');
+  const g=(gname.value||'').trim().toLowerCase(); if(!g) return;
+  await set(ref(db,'groups/'+g),{createdAt:t()});
+  const raw=(ginit.value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const setu=new Set([me,...raw]); const up={}; setu.forEach(u=>{ up['group_members/'+g+'/'+u]=true; up['user_groups/'+u+'/'+g]=true; });
+  await update(ref(db),up); gname.value=''; ginit.value=''; openG(g); info('Group ready.');
 }
+gcreate.onclick=create;
 
-async function createOrAddMembers(){
-  if(!me) return info('Use/claim a username first.');
-  const g=(groupName.value||'').trim().toLowerCase(); if(!g) return;
-  await set(ref(db,'groups/'+g), { createdAt:t() });
-  const raw=(groupUsers.value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
-  const unique=new Set([me, ...raw]); const updates={};
-  unique.forEach(u=>{ updates['group_members/'+g+'/'+u]=true; updates['user_groups/'+u+'/'+g]=true; });
-  await update(ref(db),updates);
-  groupName.value=''; groupUsers.value='';
-  openGroup(g); info('Group created/updated.');
-}
-createGroup.onclick=createOrAddMembers;
-
-function renderGroup(arr){
-  groupMessages.innerHTML = arr.map(m=>`
-    <div class="bubble ${m.from===me?'me':''}" data-msgid="${esc(m.id)}">
+function render(arr){
+  gchat.innerHTML = arr.map(m=>`
+    <div class="bubble ${m.from===me?'me':''}">
       <div class="muted mono">@${esc(m.from)}</div>
-      <div>${esc(m.text)}</div>
-      ${(isAdmin || m.from===me)? `<button class="btn del" data-del-gmsg="${esc(m.id)}">🗑</button>`:''}
+      ${m.text?`<div>${esc(m.text)}</div>`:''}
+      ${m.imageUrl?`<img class="msg" src="${esc(m.imageUrl)}" alt="img">`:''}
+      ${(admin||m.from===me)?`<button class="btn tiny" data-del="${esc(m.id)}">🗑</button>`:''}
     </div>`).join('');
-  groupMessages.scrollTop = groupMessages.scrollHeight;
+  gchat.scrollTop = gchat.scrollHeight;
 }
 
-function openGroup(g){
-  currentGroup=g; localStorage.setItem("cs_last_group", g);
-  activeGroup.textContent='#'+g; gNameMono.textContent='#'+g; groupMessages.innerHTML='';
-  if(gmRef && gmCb) off(gmRef, gmCb); if(memRef && memCb) off(memRef, memCb);
-
-  // messages (ding when new arrives from others)
+function openG(g){
+  curG=g; localStorage.setItem("cs_last_group",g);
+  gtitle.textContent='#'+g; gMono.textContent='#'+g; gchat.innerHTML='';
+  if(gmRef&&gmCb) off(gmRef,gmCb); if(memRef&&memCb) off(memRef,memCb);
+  // messages
   gmRef = ref(db,'group_messages/'+g);
-  let lastCount=0;
+  let last=0;
   gmCb = (snap)=>{
     const d=snap.val()||{}; const arr=Object.entries(d).map(([id,m])=>({id,...m})).sort((a,b)=>a.ts-b.ts);
-    if(arr.length>lastCount){
-      const latest=arr[arr.length-1];
-      if(latest && latest.from!==me){ dingLong(); notify(`New message in #${g}`, `@${latest.from}: ${latest.text||''}`); }
-    }
-    lastCount=arr.length;
-    renderGroup(arr);
+    if(arr.length>last){ const L=arr[arr.length-1]; if(L && L.from!==me){ ding(); n('New message in #'+g, '@'+L.from+(L.text?': '+L.text:' (photo)')); } }
+    last=arr.length; render(arr);
   };
   onValue(gmRef, gmCb);
-
   // members
   memRef = ref(db,'group_members/'+g);
   memCb = (snap)=>{
     const d=snap.val()||{}; const list=Object.keys(d).sort();
-    members.innerHTML = list.map(u=>`<div class="userItem"><div>@${esc(u)}</div></div>`).join('');
-    document.querySelector("#leaveGroup").style.display = list.includes(me) ? 'inline-block' : 'none';
+    members.innerHTML = list.map(u=>`<div class="row"><span>@${esc(u)}</span></div>`).join('');
+    leaveBtn.style.display = list.includes(me) ? 'inline-block' : 'none';
   };
   onValue(memRef, memCb);
 }
-
-async function sendToGroup(){
-  const text=(groupMsg.value||'').trim(); if(!text||!currentGroup) return;
-  await push(ref(db,'group_messages/'+currentGroup), { from: me, text, ts: t() });
-  groupMsg.value='';
-}
-groupSend.onclick=sendToGroup;
-groupMsg.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendToGroup();}});
-
-async function addMembersToCurrent(list){
-  if(!me) return info('Use/claim a username first.');
-  if(!currentGroup) return info('Open a group first.');
-  const raw=(list || document.querySelector("#addMemberInput").value || '').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
-  if(!raw.length) return;
-  const updates={}; raw.forEach(u=>{ updates['group_members/'+currentGroup+'/'+u]=true; updates['user_groups/'+u+'/'+currentGroup]=true; });
-  await update(ref(db),updates); document.querySelector("#addMemberInput").value=''; info('Member(s) added.');
-}
-document.querySelector("#addMemberBtn").onclick=()=>addMembersToCurrent();
-
-async function leaveCurrentGroup(){
-  if(!me || !currentGroup) return;
-  const g=currentGroup; const updates={};
-  updates['group_members/'+g+'/'+me]=null; updates['user_groups/'+me+'/'+g]=null;
-  await update(ref(db),updates);
-  info('You left #'+g); currentGroup=null; activeGroup.textContent='—'; gNameMono.textContent='—'; groupMessages.innerHTML=''; members.innerHTML='';
-}
-document.querySelector("#leaveGroup").onclick=leaveCurrentGroup;
-
-// Delete one group message
-async function deleteGroupMsg(msgId){
-  if(!currentGroup) return;
-  await remove(ref(db,'group_messages/'+currentGroup+'/'+msgId));
-  info('Message deleted.');
-}
-
-// ADMIN: Delete user cascade (same as messages page)
-async function deleteUserCascade(u){
-  if(!(me==='tosh1') || u==='tosh1') return;
-  if(!confirm(`Delete user @${u}? This removes their account, presence, requests, friendships, messages with others, and all group memberships.`)) return;
-
-  const [friendsSnap, groupsSnap, requestsSnap, messagesSnap] = await Promise.all([
-    get(child(ref(db),'friendships/'+u)),
-    get(child(ref(db),'user_groups/'+u)),
-    get(child(ref(db),'requests')),
-    get(child(ref(db),'messages'))
-  ]);
-
-  const updates = {};
-  updates['users/'+u] = null;
-  updates['presence/'+u] = null;
-  updates['requests/'+u] = null;
-  const reqAll = requestsSnap.val()||{};
-  Object.keys(reqAll).forEach(target=>{
-    if(reqAll[target] && reqAll[target][u]) updates['requests/'+target+'/'+u] = null;
-  });
-  const fr = friendsSnap.val()||{};
-  Object.keys(fr).forEach(peer=>{
-    updates['friendships/'+u+'/'+peer] = null;
-    updates['friendships/'+peer+'/'+u] = null;
-  });
-  const msgsRoot = messagesSnap.val()||{};
-  Object.keys(msgsRoot).forEach(pairKey=>{
-    if(pairKey.split('__').includes(u)) updates['messages/'+pairKey] = null;
-  });
-  const ug = (await groupsSnap).val()||{};
-  Object.keys(ug).forEach(g=>{
-    updates['group_members/'+g+'/'+u] = null;
-  });
-  updates['user_groups/'+u] = null;
-
-  await update(ref(db), updates);
-  info(`@${u} deleted.`);
-}
-
-// delegates
 document.body.addEventListener('click',(e)=>{
-  const o=e.target.getAttribute('data-open'); if(o){ openGroup(o); return; }
-  const ag=e.target.getAttribute('data-add-to-group'); if(ag){ addMembersToCurrent(ag); return; }
-  const delU=e.target.getAttribute('data-del-user'); if(delU){ deleteUserCascade(delU); return; }
-  const delM=e.target.getAttribute('data-del-gmsg'); if(delM){ deleteGroupMsg(delM); return; }
+  const o=e.target.getAttribute('data-open'); if(o){ openG(o); return; }
+  const del=e.target.getAttribute('data-del'); if(del){ remove(ref(db,'group_messages/'+curG+'/'+del)); return; }
+  const addU=e.target.getAttribute('data-addu'); if(addU){ addMembers(addU); return; }
 });
+
+async function sendG(){
+  if(!curG) return;
+  const text=(gmsg.value||'').trim(); let imageUrl=null;
+  if(gfile.files && gfile.files[0]){
+    const f=gfile.files[0]; const path=`uploads/${me}/${Date.now()}_${f.name.replace(/\s+/g,'_')}`;
+    const upRef=sref(storage,path); await uploadBytes(upRef,f); imageUrl=await getDownloadURL(upRef);
+  }
+  if(!text && !imageUrl) return;
+  await push(ref(db,'group_messages/'+curG),{from:me,text,imageUrl,ts:t()});
+  gmsg.value=''; gfile.value='';
+}
+gsend.onclick=sendG;
+gmsg.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendG(); } });
+gclear.onclick=()=>{ gfile.value=''; };
+
+async function addMembers(list){
+  if(!curG||!me) return;
+  const raw=(typeof list==='string'?list:(adders.value||'')).split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  if(!raw.length) return;
+  const up={}; raw.forEach(u=>{ up['group_members/'+curG+'/'+u]=true; up['user_groups/'+u+'/'+curG]=true; });
+  await update(ref(db),up); adders.value=''; info('Added.');
+}
+addBtn.onclick=()=>addMembers();
+
+async function leave(){
+  if(!curG||!me) return;
+  const up={}; up['group_members/'+curG+'/'+me]=null; up['user_groups/'+me+'/'+curG]=null;
+  await update(ref(db),up); info('Left #'+curG); curG=null; gtitle.textContent='—'; gMono.textContent='—'; gchat.innerHTML=''; members.innerHTML='';
+}
+leaveBtn.onclick=leave;
+
+// registered users (add to group + admin delete)
+function watchUsers(){
+  onValue(ref(db,'users'), (su)=>{
+    const users=su.val()||{}; registered.innerHTML = Object.keys(users).sort().map(u=>`
+      <div class="userItem">
+        <span>@${esc(u)}</span>
+        <div class="row">
+          <button class="btn" data-addu="${esc(u)}">Add to Group</button>
+          ${admin && u!=='tosh1' ? `<button class="btn danger" data-deluser="${esc(u)}">Delete</button>`:''}
+        </div>
+      </div>`).join('');
+  });
+}
+
+async function delUser(u){
+  if(!(me==='tosh1')||u==='tosh1') return;
+  if(!confirm(`Delete @${u}?`)) return;
+  const [friendsSnap, groupsSnap, requestsSnap, messagesSnap]=await Promise.all([
+    get(child(ref(db),'friendships/'+u)), get(child(ref(db),'user_groups/'+u)),
+    get(child(ref(db),'requests')), get(child(ref(db),'messages'))
+  ]);
+  const up={}; up['users/'+u]=null; up['presence/'+u]=null; up['requests/'+u]=null;
+  const reqAll=requestsSnap.val()||{}; Object.keys(reqAll).forEach(target=>{ if(reqAll[target]?.[u]) up['requests/'+target+'/'+u]=null; });
+  const fr=friendsSnap.val()||{}; Object.keys(fr).forEach(p=>{ up['friendships/'+u+'/'+p]=null; up['friendships/'+p+'/'+u]=null; });
+  const msgsRoot=messagesSnap.val()||{}; Object.keys(msgsRoot).forEach(k=>{ if(k.split('__').includes(u)) up['messages/'+k]=null; });
+  const ug=groupsSnap.val()||{}; Object.keys(ug).forEach(g=>{ up['group_members/'+g+'/'+u]=null; });
+  up['user_groups/'+u]=null;
+  await update(ref(db),up); info('@'+u+' deleted');
+}
+document.body.addEventListener('click',(e)=>{ const du=e.target.getAttribute('data-deluser'); if(du){ delUser(du); } });
 </script>
-</body></html>
+</body>
+</html>
+
 
 
