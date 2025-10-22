@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>ChatSpace — Groups</title>
+<title>ChatSpace — Groups (Admin + Long Ding)</title>
 <style>
   :root{--bg:#f7f7f8;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--accent:#3b82f6;--danger:#ef4444}
   *{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Arial;background:var(--bg);color:var(--text)}
@@ -13,11 +13,13 @@
   .row{display:flex;align-items:center;gap:8px}.row.end{justify-content:flex-end}
   .input{padding:8px 10px;border-radius:10px;border:1px solid var(--border);flex:1}
   .btn{padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:#fff;cursor:pointer}
-  .btn.primary{background:var(--accent);color:#fff;border:none}.btn.danger{background:#fee2e2;border-color:#fecaca;color:#991b1b}
+  .btn.primary{background:var(--accent);color:#fff;border:none}
+  .btn.danger{background:#fee2e2;border-color:#fecaca;color:#991b1b}
   .grid{display:grid;grid-template-columns:320px 1fr 320px;gap:12px}
   @media(max-width:1100px){.grid{grid-template-columns:1fr}}
   .list>*+*{border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
-  .bubble{border:1px solid var(--border);border-radius:10px;padding:8px;background:#fff}
+  .bubble{border:1px solid var(--border);border-radius:10px;padding:8px;background:#fff;position:relative}
+  .bubble .del{position:absolute;top:6px;right:6px}
   #groupMessages{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto}
   .me{background:#eef2ff}
   .userItem{display:flex;align-items:center;justify-content:space-between;padding:8px;border:1px solid var(--border);border-radius:10px}
@@ -27,6 +29,7 @@
 <header>
   <strong>ChatSpace — Groups</strong>
   <div class="row">
+    <span id="adminBadge" class="muted"></span>
     <button id="toggleSound" class="btn">🔊 Sound: <span id="soundState">On</span></button>
     <button id="enablePush" class="btn">🔔 Enable desktop notifications</button>
     <nav class="nav">
@@ -89,12 +92,12 @@
       </div>
     </div>
 
-    <!-- Right: Registered Users (Add to Group buttons) -->
+    <!-- Right: Registered Users (Add to Group + Admin Delete User) -->
     <div>
       <div class="card">
         <h3>Registered Users</h3>
         <div id="registeredUsers" class="list"></div>
-        <p class="muted" style="margin-top:6px">Click “Add to Group” to add them to the currently open group.</p>
+        <p class="muted" style="margin-top:6px">As <b>tosh1</b> you’ll also see a Delete User button.</p>
       </div>
     </div>
   </div>
@@ -102,33 +105,38 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
-import { getDatabase, ref, onValue, off, set, update, push, get, child, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
+import { getDatabase, ref, onValue, off, set, update, push, get, child, onDisconnect, serverTimestamp, remove } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
 
 const app = initializeApp({ databaseURL: "https://my-chat-ddcd1-default-rtdb.firebaseio.com/" });
 const db = getDatabase(app);
 
-// ====== SOUND + PUSH ======
+// ====== SOUND (longer two-tone ding) + PUSH ======
 let soundEnabled = (localStorage.getItem("cs_sound")||"on") === "on";
 const soundStateEl = document.querySelector("#soundState");
 soundStateEl.textContent = soundEnabled ? "On" : "Off";
 let audioCtx = null;
 function ensureAudioCtx(){ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch{} } if(audioCtx&&audioCtx.state==="suspended"){ audioCtx.resume(); } }
-function ding(){
-  if(!soundEnabled) return;
-  ensureAudioCtx(); if(!audioCtx) return;
-  const ctx=audioCtx, o=ctx.createOscillator(), g=ctx.createGain();
-  o.type="square"; o.frequency.setValueAtTime(880, ctx.currentTime);
-  g.gain.setValueAtTime(0.0001, ctx.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime+0.01);
-  g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.12);
-  o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime+0.13);
+function dingLong(){
+  if(!soundEnabled) return; ensureAudioCtx(); if(!audioCtx) return;
+  const ctx=audioCtx;
+  const seq=[ {f:660,d:0.18}, {f:990,d:0.28} ];
+  let start=ctx.currentTime;
+  seq.forEach(({f,d})=>{
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type="square"; o.frequency.setValueAtTime(f,start);
+    g.gain.setValueAtTime(0.0001,start);
+    g.gain.exponentialRampToValueAtTime(0.22,start+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,start+d);
+    o.connect(g).connect(ctx.destination); o.start(start); o.stop(start+d+0.01);
+    start += d+0.02;
+  });
 }
-document.querySelector("#toggleSound").onclick=()=>{ soundEnabled=!soundEnabled; localStorage.setItem("cs_sound", soundEnabled?"on":"off"); soundStateEl.textContent=soundEnabled?"On":"Off"; if(soundEnabled){ ensureAudioCtx(); ding(); } };
+document.querySelector("#toggleSound").onclick=()=>{ soundEnabled=!soundEnabled; localStorage.setItem("cs_sound", soundEnabled?"on":"off"); soundStateEl.textContent=soundEnabled?"On":"Off"; if(soundEnabled){ ensureAudioCtx(); dingLong(); } };
 window.addEventListener("click", ensureAudioCtx, { once:true });
 
 const pushBtn = document.querySelector("#enablePush");
 pushBtn.onclick = async () => {
-  if(!("Notification" in window)) return alert("Notifications not supported in this browser.");
+  if(!("Notification" in window)) return alert("Notifications not supported.");
   const perm = await Notification.requestPermission();
   if(perm !== "granted") return;
   new Notification("Desktop notifications enabled 🎉");
@@ -138,19 +146,19 @@ function notify(title, body){ if("Notification" in window && Notification.permis
 // ====== helpers ======
 const $=s=>document.querySelector(s), t=()=>Date.now();
 const esc = s => (s||"").replace(/[<>&]/g,m=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[m]));
-const info=m=>{const el=$("#status"); el.textContent=m; setTimeout(()=>el.textContent="",2000);};
+const info=m=>{const el=$("#status"); el.textContent=m; setTimeout(()=>el.textContent="",2500);};
 
 // elements
-const meBox=$("#me"), claimBtn=$("#claim"), share=$("#share");
+const meBox=$("#me"), claimBtn=$("#claim"), share=$("#share"), adminBadge=$("#adminBadge");
 const groupName=$("#groupName"), groupUsers=$("#groupUsers"), createGroup=$("#createGroup");
 const myGroups=$("#myGroups"), members=$("#members"), gNameMono=$("#gNameMono"), activeGroup=$("#activeGroup");
 const groupMessages=$("#groupMessages"), groupMsg=$("#groupMsg"), groupSend=$("#groupSend");
 const addMemberInput=$("#addMemberInput"), addMemberBtn=$("#addMemberBtn"), leaveGroupBtn=$("#leaveGroup");
 const regUsers=$("#registeredUsers");
 
-let me=null, gmRef=null, gmCb=null, memRef=null, memCb=null, currentGroup=null;
+let me=null, isAdmin=false, gmRef=null, gmCb=null, memRef=null, memCb=null, currentGroup=null;
 
-// Presence (optional)
+// Presence
 async function startPresence(){
   if(!me) return;
   const pRef = ref(db,'presence/'+me);
@@ -163,10 +171,12 @@ async function useOrClaim(){
   const u=(meBox.value||'').trim().toLowerCase(); if(!u) return;
   const s=await get(child(ref(db),'users/'+u));
   if(!s.exists()) await set(ref(db,'users/'+u), { createdAt:t() });
-  me=u; localStorage.setItem("cs_username",me);
+  me=u; isAdmin=(me==='tosh1');
+  localStorage.setItem("cs_username",me);
   history.replaceState({},'',location.pathname+'?u='+me);
   share.textContent=location.origin+location.pathname+'?u='+me;
-  info("Using username: "+me);
+  adminBadge.textContent = isAdmin ? "Admin: tosh1" : "";
+  info("Using username: "+me+(isAdmin?" (admin)":""));
   startPresence();
   watchMyGroups(); watchUsers();
   const last = localStorage.getItem("cs_last_group"); if(last) openGroup(last);
@@ -185,7 +195,7 @@ function watchMyGroups(){
   });
 }
 
-// users + presence (Add to Group)
+// users + presence (Add to Group + Admin Delete User)
 function watchUsers(){
   onValue(ref(db,'users'), (snapUsers)=>{
     const allUsers=snapUsers.val()||{};
@@ -196,7 +206,10 @@ function watchUsers(){
         const online = pres[u]?.online ? ' (online)' : '';
         return `<div class="userItem">
           <div><strong>@${esc(u)}</strong><span class="muted">${online}</span></div>
-          <button class="btn" data-add-to-group="${esc(u)}">Add to Group</button>
+          <div class="row">
+            <button class="btn" data-add-to-group="${esc(u)}">Add to Group</button>
+            ${isAdmin && u!=='tosh1' ? `<button class="btn danger" data-del-user="${esc(u)}">Delete</button>`:''}
+          </div>
         </div>`;
       }).join('') : '<div class="muted">No registered users yet.</div>';
     });
@@ -216,27 +229,32 @@ async function createOrAddMembers(){
 }
 createGroup.onclick=createOrAddMembers;
 
+function renderGroup(arr){
+  groupMessages.innerHTML = arr.map(m=>`
+    <div class="bubble ${m.from===me?'me':''}" data-msgid="${esc(m.id)}">
+      <div class="muted mono">@${esc(m.from)}</div>
+      <div>${esc(m.text)}</div>
+      ${(isAdmin || m.from===me)? `<button class="btn del" data-del-gmsg="${esc(m.id)}">🗑</button>`:''}
+    </div>`).join('');
+  groupMessages.scrollTop = groupMessages.scrollHeight;
+}
+
 function openGroup(g){
   currentGroup=g; localStorage.setItem("cs_last_group", g);
   activeGroup.textContent='#'+g; gNameMono.textContent='#'+g; groupMessages.innerHTML='';
   if(gmRef && gmCb) off(gmRef, gmCb); if(memRef && memCb) off(memRef, memCb);
 
-  // messages (ding when a new one arrives from others)
+  // messages (ding when new arrives from others)
   gmRef = ref(db,'group_messages/'+g);
   let lastCount=0;
   gmCb = (snap)=>{
-    const d=snap.val()||{}; const arr=Object.values(d).sort((a,b)=>a.ts-b.ts);
+    const d=snap.val()||{}; const arr=Object.entries(d).map(([id,m])=>({id,...m})).sort((a,b)=>a.ts-b.ts);
     if(arr.length>lastCount){
       const latest=arr[arr.length-1];
-      if(latest && latest.from!==me){ ding(); notify(`New message in #${g}`, `@${latest.from}: ${latest.text||''}`); }
+      if(latest && latest.from!==me){ dingLong(); notify(`New message in #${g}`, `@${latest.from}: ${latest.text||''}`); }
     }
     lastCount=arr.length;
-    groupMessages.innerHTML = arr.map(m=>`
-      <div class="bubble ${m.from===me?'me':''}">
-        <div class="muted mono">@${esc(m.from)}</div>
-        <div>${esc(m.text)}</div>
-      </div>`).join('');
-    groupMessages.scrollTop = groupMessages.scrollHeight;
+    renderGroup(arr);
   };
   onValue(gmRef, gmCb);
 
@@ -277,11 +295,60 @@ async function leaveCurrentGroup(){
 }
 document.querySelector("#leaveGroup").onclick=leaveCurrentGroup;
 
+// Delete one group message
+async function deleteGroupMsg(msgId){
+  if(!currentGroup) return;
+  await remove(ref(db,'group_messages/'+currentGroup+'/'+msgId));
+  info('Message deleted.');
+}
+
+// ADMIN: Delete user cascade (same as messages page)
+async function deleteUserCascade(u){
+  if(!(me==='tosh1') || u==='tosh1') return;
+  if(!confirm(`Delete user @${u}? This removes their account, presence, requests, friendships, messages with others, and all group memberships.`)) return;
+
+  const [friendsSnap, groupsSnap, requestsSnap, messagesSnap] = await Promise.all([
+    get(child(ref(db),'friendships/'+u)),
+    get(child(ref(db),'user_groups/'+u)),
+    get(child(ref(db),'requests')),
+    get(child(ref(db),'messages'))
+  ]);
+
+  const updates = {};
+  updates['users/'+u] = null;
+  updates['presence/'+u] = null;
+  updates['requests/'+u] = null;
+  const reqAll = requestsSnap.val()||{};
+  Object.keys(reqAll).forEach(target=>{
+    if(reqAll[target] && reqAll[target][u]) updates['requests/'+target+'/'+u] = null;
+  });
+  const fr = friendsSnap.val()||{};
+  Object.keys(fr).forEach(peer=>{
+    updates['friendships/'+u+'/'+peer] = null;
+    updates['friendships/'+peer+'/'+u] = null;
+  });
+  const msgsRoot = messagesSnap.val()||{};
+  Object.keys(msgsRoot).forEach(pairKey=>{
+    if(pairKey.split('__').includes(u)) updates['messages/'+pairKey] = null;
+  });
+  const ug = (await groupsSnap).val()||{};
+  Object.keys(ug).forEach(g=>{
+    updates['group_members/'+g+'/'+u] = null;
+  });
+  updates['user_groups/'+u] = null;
+
+  await update(ref(db), updates);
+  info(`@${u} deleted.`);
+}
+
 // delegates
 document.body.addEventListener('click',(e)=>{
   const o=e.target.getAttribute('data-open'); if(o){ openGroup(o); return; }
   const ag=e.target.getAttribute('data-add-to-group'); if(ag){ addMembersToCurrent(ag); return; }
+  const delU=e.target.getAttribute('data-del-user'); if(delU){ deleteUserCascade(delU); return; }
+  const delM=e.target.getAttribute('data-del-gmsg'); if(delM){ deleteGroupMsg(delM); return; }
 });
 </script>
 </body></html>
+
 
