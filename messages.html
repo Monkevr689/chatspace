@@ -4,37 +4,53 @@
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>ChatSpace — Messages</title>
 <style>
-  :root{--bg:#f6f7fb;--card:#fff;--border:#e6e8ef;--text:#0f172a;--muted:#64748b;--accent:#3b82f6;--danger:#ef4444}
-  *{box-sizing:border-box} body{margin:0;font-family:system-ui,Segoe UI,Arial;background:var(--bg);color:var(--text)}
-  header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
-  .nav a{margin-left:8px;text-decoration:none;padding:8px 12px;border:1px solid var(--border);border-radius:999px;color:var(--text)}
-  .nav a.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  :root{
+    --bg:#f6f7fb; --card:#fff; --border:#e6e8ef; --text:#0f172a; --muted:#64748b;
+    --accent:#3b82f6; --danger:#ef4444; --bubble:#fff; --me:#eef2ff; --link:#2563eb
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b1220; --card:#0f172a; --border:#1f2a44; --text:#e5e7eb; --muted:#93a4c7;
+    --accent:#60a5fa; --danger:#f87171; --bubble:#111827; --me:#1e293b; --link:#93c5fd
+  }
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,Segoe UI,Arial;color:var(--text);background:var(--bg)}
+  a{color:var(--link)}
+  header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--border);padding:10px 12px}
+  .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+  .left,.right{display:flex;gap:8px;align-items:center}
+  .btn{padding:8px 12px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--text);cursor:pointer}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   .wrap{max-width:1100px;margin:0 auto;padding:12px}
   .row{display:flex;gap:8px;align-items:center}
   .col{display:flex;flex-direction:column;gap:10px}
   .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px}
-  .leftRight{display:grid;grid-template-columns:320px 1fr;gap:12px}
-  @media(max-width:900px){.leftRight{grid-template-columns:1fr}}
-  .input, textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px}
-  .btn{padding:8px 12px;border:1px solid var(--border);border-radius:999px;background:#fff;cursor:pointer}
-  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-  .btn.danger{background:#fee2e2;border-color:#fecaca;color:#991b1b}
+  .grid{display:grid;grid-template-columns:320px 1fr;gap:12px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .input, textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--text)}
   .list>*+*{border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
   #chat{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto}
-  .bubble{border:1px solid var(--border);background:#fff;border-radius:12px;padding:10px}
-  .me{background:#eef2ff}
+  .bubble{border:1px solid var(--border);background:var(--bubble);border-radius:12px;padding:10px}
+  .me{background:var(--me)}
   .muted{color:var(--muted)} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
   .userItem{display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid var(--border);border-radius:10px}
-  img.msg{max-width:240px;border-radius:10px;display:block;margin-top:6px}
+  img.msg{max-width:260px;border-radius:10px;display:block;margin-top:6px}
   .tiny{font-size:12px;color:var(--muted)}
+  .pill{padding:2px 6px;border-radius:6px;border:1px solid var(--border);margin-left:6px}
 </style>
 </head>
 <body>
 <header>
-  <strong>ChatSpace — Messages</strong>
-  <div class="nav">
-    <a class="active" href="./messages.html">💬 Messages</a>
-    <a href="./groups.html">👥 Groups</a>
+  <div class="bar">
+    <div class="left">
+      <strong>ChatSpace</strong>
+      <a class="btn" href="./messages.html">💬 Messages</a>
+      <a class="btn" href="./groups.html">👥 Groups</a>
+    </div>
+    <div class="right">
+      <button id="themeBtn" class="btn">🌓 Theme: <span id="themeName">Light</span></button>
+      <button id="soundBtn" class="btn">🔊 Sound: <span id="soundState">On</span></button>
+      <button id="notifBtn" class="btn">🔔 Notifications</button>
+      <button id="testNotif" class="btn">✅ Test</button>
+    </div>
   </div>
 </header>
 
@@ -46,13 +62,12 @@
     <div class="row">
       <input id="me" class="input" placeholder="username (e.g. alice)"/>
       <button id="claim" class="btn primary">Use</button>
-      <span id="adminBadge" class="tiny"></span>
+      <span id="adminBadge" class="tiny pill"></span>
       <span class="tiny">Share: <span id="share" class="mono"></span></span>
-      <button id="toggleSound" class="btn">🔊 <span id="soundState">On</span></button>
     </div>
   </div>
 
-  <div class="leftRight">
+  <div class="grid">
     <!-- left: requests + friends + users -->
     <div class="col">
       <div class="card">
@@ -85,20 +100,25 @@
         <div class="row" style="justify-content:space-between">
           <div>Chatting with <span id="peer" class="mono">—</span></div>
         </div>
+
         <div id="chat"></div>
 
-        <!-- composer -->
-        <div class="row">
-          <textarea id="msg" placeholder="Type a message… (Enter to send)"></textarea>
+        <!-- image PREVIEW bubble (local only, not sent yet) -->
+        <div id="previewWrap" class="bubble" style="display:none;opacity:0.9">
+          <div class="muted mono">Preview (not sent)</div>
+          <img id="previewImg" class="msg" alt="preview">
         </div>
+
+        <!-- composer -->
+        <div class="row"><textarea id="msg" placeholder="Type a message… (Enter to send)"></textarea></div>
         <div class="row" style="justify-content:space-between">
-          <input id="file" type="file" accept="image/*" />
+          <input id="file" type="file" accept="image/*"/>
           <div class="row">
             <button id="send" class="btn primary">Send</button>
-            <button id="clearFile" class="btn">Clear file</button>
+            <button id="clearFile" class="btn">Clear preview</button>
           </div>
         </div>
-        <div class="tiny">Tip: attach a photo, then Send. Images upload to Firebase Storage.</div>
+        <div class="tiny">Pick an image to **show it instantly** above as a preview. Press Send to upload & deliver.</div>
       </div>
     </div>
   </div>
@@ -113,38 +133,27 @@ const app = initializeApp({ databaseURL: "https://my-chat-ddcd1-default-rtdb.fir
 const db = getDatabase(app);
 const storage = getStorage(app);
 
-// ====== sound + notifications (mac Notification Center) ======
+// ===== Theme, Sound, Notifications (top bar) =====
+const root = document.documentElement;
+const themeBtn = document.querySelector('#themeBtn');
+const themeName = document.querySelector('#themeName');
+const savedTheme = localStorage.getItem('cs_theme') || 'light';
+applyTheme(savedTheme);
+function applyTheme(th){ root.setAttribute('data-theme', th==='dark'?'dark':'light'); themeName.textContent = th==='dark'?'Dark':'Light'; localStorage.setItem('cs_theme', th); }
+themeBtn.onclick = ()=> applyTheme(root.getAttribute('data-theme')==='dark' ? 'light' : 'dark');
+
 let soundOn = (localStorage.getItem("cs_sound")||"on")==="on";
-const soundState = document.querySelector("#soundState");
+const soundState=document.querySelector("#soundState");
+document.querySelector("#soundBtn").onclick=()=>{ soundOn=!soundOn; localStorage.setItem("cs_sound",soundOn?"on":"off"); soundState.textContent=soundOn?"On":"Off"; if(soundOn){ ensureAudio(); ding(); } };
 soundState.textContent = soundOn ? "On" : "Off";
-let audioCtx=null;
-function ensureAudio(){ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch{} } if(audioCtx&&audioCtx.state==="suspended"){ audioCtx.resume(); } }
-function ding(){
-  if(!soundOn) return; ensureAudio(); if(!audioCtx) return;
-  const ctx=audioCtx; let t=ctx.currentTime;
-  [[660,0.18],[990,0.28]].forEach(([f,d])=>{
-    const o=ctx.createOscillator(), g=ctx.createGain();
-    o.type="square"; o.frequency.setValueAtTime(f,t);
-    g.gain.setValueAtTime(0.0001,t);
-    g.gain.exponentialRampToValueAtTime(0.22,t+0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001,t+d);
-    o.connect(g).connect(ctx.destination); o.start(t); o.stop(t+d+0.01);
-    t+=d+0.02;
-  });
-}
-document.querySelector("#toggleSound").onclick=()=>{ soundOn=!soundOn; localStorage.setItem("cs_sound", soundOn?"on":"off"); soundState.textContent = soundOn?"On":"Off"; if(soundOn){ ensureAudio(); ding(); } };
+let audioCtx=null; function ensureAudio(){ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch{} } if(audioCtx&&audioCtx.state==="suspended"){ audioCtx.resume(); } }
+function ding(){ if(!soundOn) return; ensureAudio(); if(!audioCtx) return; const c=audioCtx; let s=c.currentTime; [[660,0.18],[990,0.28]].forEach(([f,d])=>{ const o=c.createOscillator(), g=c.createGain(); o.type="square"; o.frequency.setValueAtTime(f,s); g.gain.setValueAtTime(0.0001,s); g.gain.exponentialRampToValueAtTime(0.22,s+0.02); g.gain.exponentialRampToValueAtTime(0.0001,s+d); o.connect(g).connect(c.destination); o.start(s); o.stop(s+d+0.01); s+=d+0.02;}); }
 window.addEventListener("click", ensureAudio, { once:true });
 
-async function ensureNotifications(){
-  if(!("Notification" in window)) return;
-  if(Notification.permission==="default"){
-    try{ await Notification.requestPermission(); }catch{}
-  }
-}
-function n(title, body){ if("Notification" in window && Notification.permission==="granted"){ new Notification(title,{ body }); } }
-
-// ask early
-ensureNotifications();
+const notifBtn=document.querySelector('#notifBtn');
+const testBtn=document.querySelector('#testNotif');
+notifBtn.onclick = async ()=>{ if(!("Notification" in window)) return alert("No Notification support"); const p=await Notification.requestPermission(); if(p!=="granted") alert("Allow notifications in your browser settings."); else new Notification("Notifications enabled 🎉"); };
+testBtn.onclick = ()=>{ if("Notification" in window && Notification.permission==="granted"){ new Notification("Test notification", { body:"It works!" }); } else alert("Enable notifications first."); };
 
 // ===== helpers =====
 const $=s=>document.querySelector(s), t=()=>Date.now(), tid=(a,b)=>[a,b].sort().join("__");
@@ -154,7 +163,8 @@ const info=m=>{const el=$("#status"); el.textContent=m; setTimeout(()=>el.textCo
 // els
 const meBox=$("#me"), claim=$("#claim"), share=$("#share"), adminBadge=$("#adminBadge");
 const incoming=$("#incoming"), friends=$("#friends"), registered=$("#registered");
-const peerEl=$("#peer"), chat=$("#chat"), msg=$("#msg"), send=$("#send"), file=$("#file"), clearFile=$("#clearFile");
+const peerEl=$("#peer"), chat=$("#chat"), msg=$("#msg"), send=$("#send");
+const file=$("#file"), clearFile=$("#clearFile"), previewWrap=$("#previewWrap"), previewImg=$("#previewImg");
 const findUser=$("#findUser"), sendReq=$("#sendReq");
 
 let me=null, admin=false, currentPeer=null, dmRef=null, dmCb=null;
@@ -179,7 +189,6 @@ async function use(){
   info('Using @'+me+(admin?' (admin)':''));
   presence();
   lists(); watchUsers();
-  ensureNotifications();
 }
 claim.onclick=use;
 const saved=(localStorage.getItem("cs_username")||"").trim(); if(saved){ meBox.value=saved; use(); }
@@ -191,7 +200,7 @@ function lists(){
   onValue(ref(db,'requests/'+me),(snap)=>{
     const d=snap.val()||{};
     const inc=Object.entries(d).filter(([,r])=>r.status==='pending').map(([from,r])=>({from,ts:r.ts})).sort((a,b)=>b.ts-a.ts);
-    if(inc.length>prev){ ding(); n('New friend request', '@'+inc[0].from); }
+    if(inc.length>prev){ ding(); if("Notification" in window && Notification.permission==="granted"){ new Notification('New friend request',{body:'@'+inc[0].from}); } }
     prev=inc.length;
     incoming.innerHTML = inc.length ? inc.map(r=>`
       <div class="row">
@@ -224,6 +233,19 @@ function watchUsers(){
   });
 }
 
+// local IMAGE PREVIEW (not sent)
+file.addEventListener('change', ()=>{
+  if(file.files && file.files[0]){
+    const url = URL.createObjectURL(file.files[0]);
+    previewImg.src = url;
+    previewWrap.style.display = 'block';
+  } else {
+    previewWrap.style.display = 'none';
+    previewImg.removeAttribute('src');
+  }
+});
+clearFile.onclick = ()=>{ file.value=''; previewWrap.style.display='none'; previewImg.removeAttribute('src'); };
+
 // dm open/render
 function render(arr){
   chat.innerHTML = arr.map(m=>`
@@ -244,7 +266,7 @@ function openDM(peer){
   dmCb = (snap)=>{
     const d=snap.val()||{}; const arr=Object.entries(d).map(([id,m])=>({id,...m})).sort((a,b)=>a.ts-b.ts);
     if(arr.length>last){
-      const L=arr[arr.length-1]; if(L && L.from!==me){ ding(); n('New message from @'+L.from, L.text||'Photo'); }
+      const L=arr[arr.length-1]; if(L && L.from!==me){ ding(); if("Notification" in window && Notification.permission==="granted"){ new Notification("New message from @"+L.from,{body:L.text||'Photo'}); } }
     }
     last=arr.length; render(arr);
   };
@@ -256,6 +278,7 @@ async function sendMsg(){
   const text=(msg.value||'').trim();
   let imageUrl=null;
   if(file.files && file.files[0]){
+    // upload then we’ll clear preview
     const f=file.files[0];
     const path=`uploads/${me}/${Date.now()}_${f.name.replace(/\s+/g,'_')}`;
     const upRef=sref(storage, path);
@@ -264,11 +287,11 @@ async function sendMsg(){
   }
   if(!text && !imageUrl) return;
   await push(ref(db,'messages/'+tid(me,currentPeer)), { from: me, to: currentPeer, text, imageUrl, ts:t() });
-  msg.value=''; file.value='';
+  msg.value='';
+  if(imageUrl){ file.value=''; previewWrap.style.display='none'; previewImg.removeAttribute('src'); }
 }
 send.onclick=sendMsg;
 msg.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMsg(); } });
-clearFile.onclick=()=>{ file.value=''; };
 
 // actions
 async function addFriend(u){
@@ -310,7 +333,6 @@ document.body.addEventListener('click',(e)=>{
   const del=e.target.getAttribute('data-del'); if(del){ delMsg(del); return; }
   const du=e.target.getAttribute('data-deluser'); if(du){ delUser(du); return; }
 });
-
 sendReq.onclick=async()=>{ const u=(findUser.value||'').trim().toLowerCase(); if(u) addFriend(u); };
 </script>
 </body>
