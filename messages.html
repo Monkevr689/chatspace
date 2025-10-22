@@ -3,9 +3,9 @@
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>ChatSpace — Messages</title>
 <style>
-  :root{--bg:#f7f7f8;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--accent:#3b82f6}
+  :root{--bg:#f7f7f8;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--accent:#3b82f6;--danger:#ef4444}
   *{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Arial;background:var(--bg);color:var(--text)}
-  header{background:#fff;border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
+  header{background:#fff;border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
   .nav a{margin-left:8px;text-decoration:none;padding:8px 12px;border:1px solid var(--border);border-radius:999px;color:var(--text)}
   .nav a.active{background:var(--accent);border-color:var(--accent);color:#fff}
   .wrap{max-width:1180px;margin:0 auto;padding:14px}
@@ -23,14 +23,19 @@
   .userItem{display:flex;align-items:center;justify-content:space-between;padding:8px;border:1px solid var(--border);border-radius:10px}
   .muted{color:var(--muted)} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
   .dot{width:10px;height:10px;border-radius:50%;margin-right:6px;background:#9ca3af}.dot.online{background:#10b981}
+  .tiny{font-size:12px;color:var(--muted)}
 </style>
 </head><body>
 <header>
   <strong>ChatSpace — Messages</strong>
-  <nav class="nav">
-    <a class="active" href="./messages.html">💬 Messages</a>
-    <a href="./groups.html">👥 Groups</a>
-  </nav>
+  <div class="row">
+    <button id="toggleSound" class="btn">🔊 Sound: <span id="soundState">On</span></button>
+    <button id="enablePush" class="btn">🔔 Enable desktop notifications</button>
+    <nav class="nav">
+      <a class="active" href="./messages.html">💬 Messages</a>
+      <a href="./groups.html">👥 Groups</a>
+    </nav>
+  </div>
 </header>
 
 <div class="wrap">
@@ -42,6 +47,7 @@
       <button id="claim" class="btn primary">Use / Claim</button>
       <div class="muted mono">Share: <span id="share"></span></div>
     </div>
+    <div class="tiny">Tip: username is remembered on this device.</div>
   </div>
 
   <div class="grid">
@@ -75,7 +81,7 @@
       </div>
     </div>
 
-    <!-- Right: Registered Users (with Add Friend buttons) -->
+    <!-- Right: Registered Users (Add Friend buttons) -->
     <div>
       <div class="card">
         <h3>Registered Users</h3>
@@ -87,24 +93,60 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
-import { getDatabase, ref, onValue, off, set, update, push, get, child } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
+import { getDatabase, ref, onValue, off, set, update, push, get, child, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
 
 const app = initializeApp({ databaseURL: "https://my-chat-ddcd1-default-rtdb.firebaseio.com/" });
 const db = getDatabase(app);
 
-// helpers
+// ====== SOUND + PUSH ======
+let soundEnabled = (localStorage.getItem("cs_sound")||"on") === "on";
+const soundStateEl = document.querySelector("#soundState");
+soundStateEl.textContent = soundEnabled ? "On" : "Off";
+let audioCtx = null;
+function ensureAudioCtx(){ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch{} } if(audioCtx&&audioCtx.state==="suspended"){ audioCtx.resume(); } }
+function ding(){
+  if(!soundEnabled) return;
+  ensureAudioCtx(); if(!audioCtx) return;
+  const ctx=audioCtx, o=ctx.createOscillator(), g=ctx.createGain();
+  o.type="square"; o.frequency.setValueAtTime(880, ctx.currentTime);
+  g.gain.setValueAtTime(0.0001, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.12);
+  o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime+0.13);
+}
+document.querySelector("#toggleSound").onclick=()=>{ soundEnabled=!soundEnabled; localStorage.setItem("cs_sound", soundEnabled?"on":"off"); soundStateEl.textContent=soundEnabled?"On":"Off"; if(soundEnabled){ ensureAudioCtx(); ding(); } };
+window.addEventListener("click", ensureAudioCtx, { once:true });
+
+const pushBtn = document.querySelector("#enablePush");
+pushBtn.onclick = async () => {
+  if(!("Notification" in window)) return alert("Notifications not supported in this browser.");
+  const perm = await Notification.requestPermission();
+  if(perm !== "granted") return;
+  new Notification("Desktop notifications enabled 🎉");
+};
+
+// ====== helpers ======
 const $=s=>document.querySelector(s), t=()=>Date.now(), tid=(a,b)=>[a,b].sort().join("__");
 const esc = s => (s||"").replace(/[<>&]/g,m=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[m]));
 const info=m=>{const el=$("#status"); el.textContent=m; setTimeout(()=>el.textContent="",2000);};
+function notify(title, body){ if("Notification" in window && Notification.permission==="granted"){ new Notification(title, { body }); } }
 
-// elements
+// ====== elements ======
 const meBox=$("#me"), claimBtn=$("#claim"), share=$("#share");
 const incoming=$("#incoming"), friends=$("#friends");
 const findUser=$("#findUser"), sendReq=$("#sendReq");
 const dmWith=$("#dmWith"), dmChat=$("#dmChat"), dmMsg=$("#dmMsg"), dmSend=$("#dmSend");
 const regUsers=$("#registeredUsers");
-
 let me=null, dmRef=null, dmCb=null, currentDM=null;
+
+// Presence (optional but nice)
+async function startPresence(){
+  if(!me) return;
+  const pRef = ref(db,'presence/'+me);
+  await set(pRef, { online:true, lastSeen: serverTimestamp() });
+  onDisconnect(pRef).set({ online:false, lastSeen: serverTimestamp() });
+  setInterval(()=>{ update(pRef,{online:true,lastSeen:serverTimestamp()}); }, 30000);
+}
 
 async function useOrClaim(){
   const u=(meBox.value||'').trim().toLowerCase(); if(!u) return;
@@ -114,24 +156,28 @@ async function useOrClaim(){
   history.replaceState({},'',location.pathname+'?u='+me);
   share.textContent=location.origin+location.pathname+'?u='+me;
   info("Using username: "+me);
+  startPresence();
   loadDMLists(); watchUsers();
 }
 claimBtn.onclick=useOrClaim;
-
-// auto-load saved
 const saved=(localStorage.getItem("cs_username")||'').trim(); if(saved){ meBox.value=saved; useOrClaim(); }
 
-// lists
+// DM lists + ding on new request / new message
 function loadDMLists(){
   if(!me) return;
+  // incoming requests (ding when count grows)
+  let prevPending=0;
   onValue(ref(db,'requests/'+me),(snap)=>{
     const d=snap.val()||{};
-    const inc = Object.entries(d).filter(([,r])=>r.status==='pending').map(([from,r])=>({from,ts:r.ts}));
+    const inc = Object.entries(d).filter(([,r])=>r.status==='pending').map(([from,r])=>({from,ts:r.ts})).sort((a,b)=>b.ts-a.ts);
+    if(inc.length>prevPending){ ding(); notify("New friend request", `@${inc[0].from} sent you a request`); }
+    prevPending=inc.length;
     incoming.innerHTML = inc.length ? inc.map(r=>`
       <div class="row"><div>@${esc(r.from)}</div>
       <button class="btn primary" data-accept="${esc(r.from)}">Accept</button>
       <button class="btn" data-decline="${esc(r.from)}">Decline</button></div>`).join('') : '<div class="muted">No pending.</div>';
   });
+  // friends
   onValue(ref(db,'friendships/'+me),(snap)=>{
     const f=snap.val()||{}; const arr=Object.keys(f);
     friends.innerHTML = arr.length ? arr.map(u=>`
@@ -140,7 +186,7 @@ function loadDMLists(){
   });
 }
 
-// users + presence (with Add Friend button)
+// users + presence (Add Friend)
 function watchUsers(){
   onValue(ref(db,'users'), (snapUsers)=>{
     const allUsers=snapUsers.val()||{};
@@ -167,25 +213,18 @@ async function sendRequest(targetName){
   info('Request sent.'); findUser.value='';
 }
 
-async function accept(from){
-  await update(ref(db),{
-    ['requests/'+me+'/'+from+'/status']:'accepted',
-    ['friendships/'+me+'/'+from]:true,
-    ['friendships/'+from+'/'+me]:true
-  });
-  info('Accepted.');
-}
-async function decline(from){
-  await update(ref(db),{ ['requests/'+me+'/'+from+'/status']:'declined' });
-  info('Declined.');
-}
-
 function openDM(peer){
   currentDM=peer; dmWith.textContent='@'+peer; dmChat.innerHTML='';
   if(dmRef && dmCb) off(dmRef, dmCb);
   dmRef = ref(db,'messages/'+tid(me,peer));
+  let lastCount = 0;
   dmCb = (snap)=>{
     const msgs=snap.val()||{}; const arr=Object.values(msgs).sort((a,b)=>a.ts-b.ts);
+    if(arr.length>lastCount){
+      const latest=arr[arr.length-1];
+      if(latest && latest.from!==me){ ding(); notify(`New message from @${latest.from}`, latest.text||''); }
+    }
+    lastCount=arr.length;
     dmChat.innerHTML = arr.map(m=>`
       <div class="bubble ${m.from===me?'me':''}">
         <div class="muted mono">@${esc(m.from)}</div>
@@ -201,15 +240,14 @@ async function sendDM(){
   dmMsg.value='';
 }
 
+document.body.addEventListener('click',(e)=>{
+  const a=e.target.getAttribute('data-accept'); if(a){ update(ref(db),{['requests/'+me+'/'+a+'/status']:'accepted',['friendships/'+me+'/'+a]:true,['friendships/'+a+'/'+me]:true}); return; }
+  const d=e.target.getAttribute('data-decline'); if(d){ update(ref(db),{['requests/'+me+'/'+d+'/status']:'declined'}); return; }
+  const o=e.target.getAttribute('data-open-dm'); if(o){ openDM(o); return; }
+  const f=e.target.getAttribute('data-add-friend'); if(f){ sendRequest(f); return; }
+});
 sendReq.onclick=()=>sendRequest();
 dmSend.onclick=sendDM;
 dmMsg.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendDM();}});
-
-document.body.addEventListener('click',(e)=>{
-  const a=e.target.getAttribute('data-accept'); if(a) return accept(a);
-  const d=e.target.getAttribute('data-decline'); if(d) return decline(d);
-  const o=e.target.getAttribute('data-open-dm'); if(o) return openDM(o);
-  const f=e.target.getAttribute('data-add-friend'); if(f) return sendRequest(f);
-});
 </script>
 </body></html>
