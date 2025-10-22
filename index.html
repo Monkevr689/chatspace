@@ -3,210 +3,315 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ChatSpace — DMs + Groups (No Login, Persistent)</title>
-<meta name="description" content="Friend requests & 1:1 chat + group chats using Firebase Realtime Database. No login required. Username is remembered.">
+<title>ChatSpace — Messages & Groups (Presence + Notifications + Leave)</title>
 <style>
-  :root {--bg:#f7f7f8;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--accent:#3b82f6}
-  *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--text)}
-  header{background:var(--accent);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:10px;justify-content:space-between}
-  header .brand{display:flex;align-items:center;gap:10px}
-  header img{height:40px;width:40px;border-radius:50%}
-  header h1{font-size:18px;margin:0}
-  .wrap{max-width:1120px;margin:0 auto;padding:16px}
+  :root {--bg:#f7f7f8;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--accent:#3b82f6;--danger:#ef4444;--online:#10b981;--offline:#9ca3af}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--text)}
+  header{background:#fff;border-bottom:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;gap:12px;justify-content:space-between;position:sticky;top:0;z-index:10}
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand img{height:36px;width:36px;border-radius:50%}
+  .brand h1{font-size:18px;margin:0}
+  .tabs{display:flex;gap:8px;align-items:center}
+  .tab{position:relative;display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--border);border-radius:999px;background:#fff;cursor:pointer}
+  .tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .badge{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;border-radius:999px;background:var(--danger);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;padding:0 5px}
+  .wrap{max-width:1180px;margin:0 auto;padding:14px}
   .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;margin:10px 0}
   .row{display:flex;align-items:center;gap:8px}
   .row.sb{justify-content:space-between}
   .btn{padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:#fff;cursor:pointer}
   .btn.primary{background:var(--accent);color:#fff;border:none}
-  .btn.primary:hover{opacity:.9}
+  .btn.secondary{background:#f3f4f6}
+  .btn.danger{background:#fee2e2;border-color:#fecaca;color:#991b1b}
   .input{padding:8px 10px;border-radius:10px;border:1px solid var(--border);flex:1}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .grid3{display:grid;grid-template-columns:320px 1fr;gap:12px}
-  @media(max-width:980px){.grid2{grid-template-columns:1fr}.grid3{grid-template-columns:1fr}}
+  .grid3{display:grid;grid-template-columns:320px 1fr 300px;gap:12px}
+  @media(max-width:1100px){.grid3{grid-template-columns:1fr}}
   .list>*+*{border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
   textarea{width:100%;min-height:80px;padding:8px;border-radius:10px;border:1px solid var(--border);resize:vertical}
   .muted{color:var(--muted);font-size:13px}
   .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
-  .badge{display:inline-block;padding:2px 8px;border:1px solid var(--border);border-radius:999px;background:#f3f4f6;font-size:12px}
-  #dmChat,#groupMessages{display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow:auto}
+  #dmChat,#groupMessages{display:flex;flex-direction:column;gap:8px;max-height:58vh;overflow:auto}
   .bubble{border:1px solid var(--border);border-radius:10px;padding:8px;background:#fff}
   .me{background:#eef2ff}
-  .groupRow{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);border-radius:10px;padding:8px}
+  .userItem{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--border);border-radius:10px;padding:8px}
+  .dot{width:10px;height:10px;border-radius:999px;margin-right:6px}
+  .dot.online{background:var(--online)} .dot.offline{background:var(--offline)}
+  .sound{margin-left:8px;font-size:13px}
 </style>
 </head>
 <body>
 <header>
   <div class="brand">
     <img src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Chat_icon.png" alt="logo">
-    <h1>ChatSpace — DMs + Groups</h1>
+    <h1>ChatSpace</h1>
   </div>
-  <div class="muted">Realtime chat • username & data saved</div>
+
+  <div class="tabs">
+    <button id="tabMessages" class="tab active" title="Direct Messages">💬 Messages <span id="badgeMessages" class="badge" style="display:none">0</span></button>
+    <button id="tabGroups" class="tab" title="Group Chats">👥 Groups <span id="badgeGroups" class="badge" style="display:none">0</span></button>
+    <button id="toggleSound" class="btn secondary sound" title="Toggle sound">🔊 Sound: <span id="soundState">On</span></button>
+  </div>
 </header>
 
 <div class="wrap">
   <div id="status" class="muted" style="margin:6px 0;"></div>
 
-  <!-- username (saved) -->
+  <!-- Username -->
   <div class="card">
     <div class="row">
       <input id="me" class="input" placeholder="choose a username (e.g. alice)">
       <button id="claim" class="btn primary">Use / Claim</button>
       <div class="muted mono">Share: <span id="share"></span></div>
     </div>
-    <div class="muted" style="margin-top:6px">Tip: your username is remembered on this device and auto-loaded next time.</div>
+    <div class="muted" style="margin-top:6px">Your username & last opened group are remembered on this device.</div>
   </div>
 
-  <div class="grid2">
-    <!-- DMs -->
-    <section>
-      <div class="card">
-        <h2>Direct Messages</h2>
-        <div class="grid3">
-          <div>
-            <div class="card">
-              <h3>Find someone</h3>
-              <div class="row">
-                <input id="findUser" class="input" placeholder="enter username (e.g. bob)">
-                <button id="sendReq" class="btn primary">Send Request</button>
-              </div>
-            </div>
-
-            <div class="card">
-              <h3>Incoming</h3>
-              <div id="incoming" class="list"></div>
-              <h3 style="margin-top:10px">Outgoing</h3>
-              <div id="outgoing" class="list"></div>
-            </div>
-
-            <div class="card">
-              <h3>Friends</h3>
-              <div id="friends" class="list"></div>
+  <!-- SECTION: Messages -->
+  <section id="sectionMessages">
+    <div class="card">
+      <h2>Direct Messages</h2>
+      <div class="grid3">
+        <!-- Left column: requests & friends -->
+        <div>
+          <div class="card">
+            <h3>Find someone</h3>
+            <div class="row">
+              <input id="findUser" class="input" placeholder="enter username (e.g. bob)">
+              <button id="sendReq" class="btn primary">Send Request</button>
             </div>
           </div>
 
-          <div>
-            <div class="card">
-              <h3>Chatting with <span id="dmWith" class="mono">—</span></h3>
-              <div id="dmChat"></div>
-              <div style="margin-top:8px;">
-                <textarea id="dmMsg" placeholder="Type a message… (Enter to send)"></textarea>
-                <div class="row" style="justify-content:flex-end;margin-top:6px;">
-                  <button id="dmSend" class="btn primary">Send</button>
-                </div>
-              </div>
-            </div>
+          <div class="card">
+            <h3>Incoming</h3>
+            <div id="incoming" class="list"></div>
+            <h3 style="margin-top:10px">Outgoing</h3>
+            <div id="outgoing" class="list"></div>
           </div>
-        </div><!-- grid3 -->
-      </div>
-    </section>
 
-    <!-- GROUPS -->
-    <section>
-      <div class="card">
-        <h2>Group Chats</h2>
-
-        <div class="card">
-          <h3>Create / Join group</h3>
-          <div class="row">
-            <input id="groupName" class="input" placeholder="group name (e.g. class7)">
+          <div class="card">
+            <h3>Friends</h3>
+            <div id="friends" class="list"></div>
           </div>
-          <div class="row" style="margin-top:8px">
-            <input id="groupUsers" class="input" placeholder="initial members (comma-separated usernames)">
-            <button id="createGroup" class="btn primary">Create / Add</button>
-          </div>
-          <p class="muted" style="margin-top:6px">This adds everyone listed (plus you) to the group.</p>
         </div>
 
-        <div class="grid3">
-          <div>
-            <div class="card">
-              <h3>My Groups</h3>
-              <div id="myGroups" class="list"></div>
-            </div>
-
-            <div class="card">
-              <h3>Members of <span id="gNameMono" class="mono">—</span></h3>
-              <div id="members" class="list"></div>
-
-              <!-- NEW: add members later -->
-              <div class="row" style="margin-top:8px">
-                <input id="addMemberInput" class="input" placeholder="add members (comma-separated)">
-                <button id="addMemberBtn" class="btn primary">Add to Current Group</button>
+        <!-- Middle: chat -->
+        <div>
+          <div class="card">
+            <h3>Chatting with <span id="dmWith" class="mono">—</span></h3>
+            <div id="dmChat"></div>
+            <div style="margin-top:8px;">
+              <textarea id="dmMsg" placeholder="Type a message… (Enter to send)"></textarea>
+              <div class="row" style="justify-content:flex-end;margin-top:6px;">
+                <button id="dmSend" class="btn primary">Send</button>
               </div>
             </div>
           </div>
+        </div>
 
-          <div>
-            <div class="card">
-              <h3>Group: <span id="activeGroup" class="mono">—</span></h3>
-              <div id="groupMessages"></div>
-              <div class="row" style="margin-top:10px">
-                <textarea id="groupMsg" placeholder="Message the group… (Enter to send)"></textarea>
-              </div>
-              <div class="row" style="justify-content:flex-end;margin-top:6px">
-                <button id="groupSend" class="btn primary">Send to Group</button>
-              </div>
+        <!-- Right: registered users & presence -->
+        <div>
+          <div class="card">
+            <h3>Registered Users</h3>
+            <div id="registeredUsers" class="list"></div>
+          </div>
+        </div>
+      </div><!-- grid3 -->
+    </div>
+  </section>
+
+  <!-- SECTION: Groups -->
+  <section id="sectionGroups" style="display:none">
+    <div class="card">
+      <h2>Group Chats</h2>
+      <div class="grid3">
+        <!-- Left column: create/join + my groups + members -->
+        <div>
+          <div class="card">
+            <h3>Create / Join</h3>
+            <div class="row">
+              <input id="groupName" class="input" placeholder="group name (e.g. class7)">
+            </div>
+            <div class="row" style="margin-top:8px">
+              <input id="groupUsers" class="input" placeholder="initial members (comma-separated)">
+              <button id="createGroup" class="btn primary">Create / Add</button>
+            </div>
+            <p class="muted" style="margin-top:6px">Adds everyone listed (plus you) to the group.</p>
+          </div>
+
+          <div class="card">
+            <h3>My Groups</h3>
+            <div id="myGroups" class="list"></div>
+          </div>
+
+          <div class="card">
+            <h3>Members of <span id="gNameMono" class="mono">—</span></h3>
+            <div id="members" class="list"></div>
+            <div class="row" style="margin-top:8px">
+              <input id="addMemberInput" class="input" placeholder="add members (comma-separated)">
+              <button id="addMemberBtn" class="btn secondary">Add to Current Group</button>
+            </div>
+            <div class="row" style="margin-top:8px; justify-content:flex-end">
+              <button id="leaveGroup" class="btn danger">Leave This Group</button>
             </div>
           </div>
-        </div><!-- grid3 -->
-      </div>
-    </section>
-  </div><!-- grid2 -->
+        </div>
+
+        <!-- Middle: group messages -->
+        <div>
+          <div class="card">
+            <h3>Group: <span id="activeGroup" class="mono">—</span></h3>
+            <div id="groupMessages"></div>
+            <div class="row" style="margin-top:10px">
+              <textarea id="groupMsg" placeholder="Message the group… (Enter to send)"></textarea>
+            </div>
+            <div class="row" style="justify-content:flex-end;margin-top:6px">
+              <button id="groupSend" class="btn primary">Send to Group</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: registered users (add to current group) -->
+        <div>
+          <div class="card">
+            <h3>Registered Users</h3>
+            <div id="registeredUsersGroups" class="list"></div>
+            <p class="muted" style="margin-top:6px">Click “Add to Group” to add them to the currently open group.</p>
+          </div>
+        </div>
+      </div><!-- grid3 -->
+    </div>
+  </section>
 
   <div class="muted" style="font-size:12px;margin-top:8px">
-    Data paths: 
-    <span class="mono">/users, /requests, /friendships, /messages/{pair}, /groups/{g}, /group_members/{g}/{user}, /user_groups/{user}/{g}, /group_messages/{g}/{id}</span>
+    Data paths:
+    <span class="mono">/users, /presence/{user}, /requests, /friendships, /messages/{pair}, /groups/{g}, /group_members/{g}/{user}, /user_groups/{user}/{g}, /group_messages/{g}/{id}</span>
   </div>
 </div>
 
-<!-- Firebase SDK v10 (no Auth used) -->
+<!-- Firebase (RTDB only) -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
-  import { getDatabase, ref, onValue, off, set, update, push, get, child } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
+  import { getDatabase, ref, onValue, off, set, update, push, get, child, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
 
-  // Your DB
+  // Your RTDB
   const app = initializeApp({ databaseURL: "https://my-chat-ddcd1-default-rtdb.firebaseio.com/" });
   const db = getDatabase(app);
 
   // helpers
-  const $ = s => document.querySelector(s);
-  const t = () => Date.now();
-  const tid = (a,b)=>[a,b].sort().join("__");
+  const $=s=>document.querySelector(s);
+  const t = ()=>Date.now();
+  const tid=(a,b)=>[a,b].sort().join("__");
   const esc = s => (s||"").replace(/[<>&]/g, m => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]));
+  const info = m => { const el=$("#status"); el.textContent=m; setTimeout(()=>el.textContent="",2000); };
 
-  const status=$('#status'); const info=m=>{status.textContent=m; setTimeout(()=>status.textContent='',2000);};
+  /* ======= SOUND (Pop/Discord style via WebAudio, works after any user click) ======= */
+  let soundEnabled = (localStorage.getItem("cs_sound")||"on") === "on";
+  const soundStateEl = $("#soundState");
+  soundStateEl.textContent = soundEnabled ? "On" : "Off";
+  let audioCtx = null;
+  function ensureAudioCtx(){
+    if(!audioCtx){ try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch{} }
+    if(audioCtx && audioCtx.state==="suspended"){ audioCtx.resume(); }
+  }
+  function playPing(){
+    if(!soundEnabled) return;
+    ensureAudioCtx();
+    if(!audioCtx) return;
+    const ctx = audioCtx;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "square";              // pop/click-ish
+    o.frequency.setValueAtTime(880, ctx.currentTime);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
+    o.connect(g).connect(ctx.destination);
+    o.start();
+    o.stop(ctx.currentTime + 0.13);
+  }
+  $("#toggleSound").onclick = ()=>{
+    soundEnabled = !soundEnabled;
+    localStorage.setItem("cs_sound", soundEnabled ? "on" : "off");
+    soundStateEl.textContent = soundEnabled ? "On" : "Off";
+    ensureAudioCtx();
+    if(soundEnabled) playPing();
+  };
+  // prime audio after any click (browser gesture requirement)
+  window.addEventListener("click", ensureAudioCtx, { once:true });
 
-  // USER (persisted)
-  const meBox=$('#me'), claimBtn=$('#claim'), share=$('#share');
-  let me = null;
+  // Tab switcher + badges
+  const tabMessages=$("#tabMessages"), tabGroups=$("#tabGroups");
+  const secMessages=$("#sectionMessages"), secGroups=$("#sectionGroups");
+  const badgeMessages=$("#badgeMessages"), badgeGroups=$("#badgeGroups");
+  function showMessages(){ tabMessages.classList.add("active"); tabGroups.classList.remove("active"); secMessages.style.display="block"; secGroups.style.display="none"; }
+  function showGroups(){ tabGroups.classList.add("active"); tabMessages.classList.remove("active"); secGroups.style.display="block"; secMessages.style.display="none"; }
+  tabMessages.onclick = showMessages;
+  tabGroups.onclick = showGroups;
 
+  // elements
+  const meBox=$("#me"), claimBtn=$("#claim"), share=$("#share");
+
+  // DMs
+  const findUser=$("#findUser"), sendReq=$("#sendReq");
+  const incoming=$("#incoming"), outgoing=$("#outgoing"), friends=$("#friends");
+  const dmWith=$("#dmWith"), dmChat=$("#dmChat"), dmMsg=$("#dmMsg"), dmSend=$("#dmSend");
+  let currentDM=null, dmRef=null, dmCb=null;
+
+  // Groups
+  const groupName=$("#groupName"), groupUsers=$("#groupUsers"), createGroup=$("#createGroup");
+  const myGroups=$("#myGroups"), members=$("#members"), gNameMono=$("#gNameMono"), activeGroup=$("#activeGroup");
+  const groupMessages=$("#groupMessages"), groupMsg=$("#groupMsg"), groupSend=$("#groupSend");
+  const addMemberInput=$("#addMemberInput"), addMemberBtn=$("#addMemberBtn");
+  const leaveGroupBtn=$("#leaveGroup");
+  let currentGroup=null, gmRef=null, gmCb=null, memRef=null, memCb=null;
+  let myMemberList = []; // to show/hide Leave button
+
+  // Registered users lists (Messages + Groups panes)
+  const regUsersDM=$("#registeredUsers"), regUsersGroups=$("#registeredUsersGroups");
+
+  // Persistence (client-side)
+  const lastReadDM = JSON.parse(localStorage.getItem("cs_last_read_dm")||"{}");   // {peer: ts}
+  const lastReadGroup = JSON.parse(localStorage.getItem("cs_last_read_group")||"{}"); // {group: ts}
+  function setLastReadDM(peer){ lastReadDM[peer]=Date.now(); localStorage.setItem("cs_last_read_dm", JSON.stringify(lastReadDM)); }
+  function setLastReadGroup(g){ lastReadGroup[g]=Date.now(); localStorage.setItem("cs_last_read_group", JSON.stringify(lastReadGroup)); }
+
+  // Presence
+  let me=null, presHeartbeat=null;
+  async function startPresence(){
+    if(!me) return;
+    const pRef = ref(db,'presence/'+me);
+    await set(pRef, { online:true, lastSeen: serverTimestamp() });
+    onDisconnect(pRef).set({ online:false, lastSeen: serverTimestamp() });
+    if(presHeartbeat) clearInterval(presHeartbeat);
+    presHeartbeat = setInterval(()=>{ update(pRef,{ online:true, lastSeen: serverTimestamp() }); }, 30000);
+  }
+
+  // Use/claim username (remembered)
   async function useOrClaim(){
-    const u=(meBox.value||'').trim().toLowerCase();
+    const u=(meBox.value||"").trim().toLowerCase();
     if(!u) return;
     const s=await get(child(ref(db),'users/'+u));
     if(!s.exists()){ await set(ref(db,'users/'+u), { createdAt:t() }); }
     me=u;
-    localStorage.setItem('cs_username', me);
+    localStorage.setItem("cs_username", me);
     history.replaceState({},'',location.pathname+'?u='+me);
     share.textContent = location.origin + location.pathname + '?u=' + me;
-    info('Using username: '+me);
-    loadDMLists(); watchMyGroups();
-    // reopen last group if any
-    const last = localStorage.getItem('cs_last_group');
-    if(last) openGroup(last);
+    info("Using username: "+me);
+    startPresence();
+    loadDMLists();
+    watchMyGroups();
+    watchRegisteredUsers();
+    // reopen last group
+    const last = localStorage.getItem("cs_last_group"); if(last) openGroup(last);
   }
-  claimBtn.addEventListener('click', useOrClaim);
+  claimBtn.onclick = useOrClaim;
 
   // Auto-load saved username
-  const saved = (localStorage.getItem('cs_username')||'').trim();
-  if(saved){ meBox.value = saved; useOrClaim(); }
+  const savedUser=(localStorage.getItem("cs_username")||"").trim();
+  if(savedUser){ meBox.value=savedUser; useOrClaim(); }
 
-  // ===== DMs =====
-  const findUser=$('#findUser'), sendReq=$('#sendReq');
-  const incoming=$('#incoming'), outgoing=$('#outgoing'), friends=$('#friends');
-  const dmWith=$('#dmWith'), dmChat=$('#dmChat'), dmMsg=$('#dmMsg'), dmSend=$('#dmSend');
-  let currentDM=null; let dmRef=null; let dmCb=null;
-
+  /* ====================== DMs ====================== */
   function renderIncoming(list){
     incoming.innerHTML = list.length ? list.map(r=>`
       <div class="row sb">
@@ -216,24 +321,33 @@
           <button class="btn" data-decline="${esc(r.from)}">Decline</button>
         </div>
       </div>`).join('') : '<div class="muted">No pending.</div>';
+    // notifications: pending count
+    const c = list.length;
+    if(c>0){ badgeMessages.style.display='flex'; badgeMessages.textContent=String(c); } else { badgeMessages.style.display='none'; }
   }
   function renderOutgoing(list){
     outgoing.innerHTML = list.length ? list.map(r=>`
-      <div class="row sb"><div>@${esc(r.to)}</div><span class="badge">${esc(r.status)}</span></div>
+      <div class="row sb"><div>@${esc(r.to)}</div><span class="badge" style="position:static;background:#f3f4f6;color:#111">${esc(r.status)}</span></div>
     `).join('') : '<div class="muted">None.</div>';
   }
   function renderFriends(list){
     friends.innerHTML = list.length ? list.map(u=>`
-      <div class="row sb"><div>@${esc(u)}</div><button class="btn primary" data-open-dm="${esc(u)}">Message</button></div>
+      <div class="row sb">
+        <div>@${esc(u)}</div>
+        <button class="btn primary" data-open-dm="${esc(u)}">Message</button>
+      </div>
     `).join('') : '<div class="muted">No friends yet.</div>';
   }
-
   function loadDMLists(){
     if(!me) return;
+    // Incoming requests (sound on new pending)
+    let prevPendingCount = 0;
     onValue(ref(db,'requests/'+me),(snap)=>{
       const d=snap.val()||{};
       const inc = Object.entries(d).filter(([,r])=>r.status==='pending').map(([from,r])=>({from, ts:r.ts})).sort((a,b)=>b.ts-a.ts);
       renderIncoming(inc);
+      if(inc.length > prevPendingCount){ playPing(); }
+      prevPendingCount = inc.length;
     });
     onValue(ref(db,'requests'),(snap)=>{
       const all=snap.val()||{}, out=[];
@@ -245,16 +359,16 @@
       const f=snap.val()||{}; renderFriends(Object.keys(f));
     });
   }
-
   async function sendRequest(){
     const target=(findUser.value||'').trim().toLowerCase();
     if(!target||!me) return;
     const s=await get(child(ref(db),'users/'+target));
     if(!s.exists()) return alert('User not found. Ask them to use/claim a username first.');
     await set(ref(db,'requests/'+target+'/'+me), { status:'pending', ts:t() });
-    info('Request sent.'); findUser.value='';
+    info('Request sent.');
+    findUser.value='';
   }
-  sendReq.addEventListener('click', sendRequest);
+  sendReq.onclick = sendRequest;
 
   async function accept(from){
     await update(ref(db),{
@@ -271,16 +385,24 @@
 
   function openDM(peer){
     currentDM=peer; dmWith.textContent='@'+peer; dmChat.innerHTML='';
+    setLastReadDM(peer);
     if(dmRef && dmCb) off(dmRef, dmCb);
     dmRef = ref(db,'messages/'+tid(me,peer));
+    let lastCount = 0;
     dmCb = (snap)=>{
       const msgs=snap.val()||{}; const arr=Object.values(msgs).sort((a,b)=>a.ts-b.ts);
+      if(arr.length > lastCount){
+        const latest = arr[arr.length - 1];
+        if(latest && latest.from !== me) playPing();
+      }
+      lastCount = arr.length;
       dmChat.innerHTML = arr.map(m=>`
         <div class="bubble ${m.from===me?'me':''}">
           <div class="muted mono">@${esc(m.from)}</div>
           <div>${esc(m.text)}</div>
         </div>`).join('');
       dmChat.scrollTop = dmChat.scrollHeight;
+      setLastReadDM(peer);
     };
     onValue(dmRef, dmCb);
   }
@@ -290,101 +412,100 @@
     await push(ref(db,'messages/'+tid(me,currentDM)), { from: me, to: currentDM, text, ts:t() });
     dmMsg.value='';
   }
-  dmSend.addEventListener('click', sendDM);
+  dmSend.onclick = sendDM;
   dmMsg.addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendDM(); } });
 
-  // delegate buttons (DM + Groups)
-  document.body.addEventListener('click', (e)=>{
-    const a=e.target.getAttribute('data-accept'); if(a) return accept(a);
-    const d=e.target.getAttribute('data-decline'); if(d) return decline(d);
-    const o=e.target.getAttribute('data-open-dm'); if(o) return openDM(o);
-    const g=e.target.getAttribute('data-open-group'); if(g) return openGroup(g);
-  });
-
-  // ===== GROUPS =====
-  const groupName=$('#groupName'), groupUsers=$('#groupUsers'), createGroup=$('#createGroup');
-  const myGroups=$('#myGroups'), members=$('#members'), gNameMono=$('#gNameMono'), activeGroup=$('#activeGroup');
-  const groupMessages=$('#groupMessages'), groupMsg=$('#groupMsg'), groupSend=$('#groupSend');
-  const addMemberInput=$('#addMemberInput'), addMemberBtn=$('#addMemberBtn');
-
-  let currentGroup=null; let gmRef=null; let gmCb=null; let memRef=null; let memCb=null;
-
+  /* ====================== Groups ====================== */
   function watchMyGroups(){
     if(!me) return;
     onValue(ref(db,'user_groups/'+me),(snap)=>{
       const d=snap.val()||{}; const list=Object.keys(d).sort();
       myGroups.innerHTML = list.length ? list.map(g=>`
-        <div class="groupRow">
+        <div class="userItem">
           <div>#${esc(g)}</div>
-          <button class="btn primary" data-open-group="${esc(g)}">Open</button>
+          <div class="row">
+            <button class="btn secondary" data-open-group="${esc(g)}">Open</button>
+          </div>
         </div>`).join('') : '<div class="muted">You are not in any groups yet.</div>';
+
+      // Unread count for groups (simple latest ts check)
+      let unread=0;
+      list.forEach(g=>{
+        const refHead = ref(db,'group_messages/'+g);
+        onValue(refHead,(s)=>{
+          const d=s.val()||{}; const arr=Object.values(d);
+          if(arr.length){
+            const latest = Math.max(...arr.map(m=>m.ts||0));
+            const last = lastReadGroup[g]||0;
+            if(latest > last) unread++;
+          }
+          badgeGroups.style.display = unread>0 ? 'flex' : 'none';
+          if(unread>0) badgeGroups.textContent = String(unread);
+        }, {onlyOnce:true});
+      });
     });
   }
 
-  // Create OR add initial members (comma-separated)
   async function createOrAddMembers(){
     if(!me) return info('Use/claim a username first.');
-    const g=(groupName.value||'').trim().toLowerCase();
-    if(!g) return;
-    await set(ref(db,'groups/'+g), { createdAt: t() });
-
+    const g=(groupName.value||'').trim().toLowerCase(); if(!g) return;
+    await set(ref(db,'groups/'+g), { createdAt:t() });
     const raw=(groupUsers.value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
     const unique=new Set([me, ...raw]);
     const updates={};
-    for(const u of unique){
+    unique.forEach(u=>{
       updates['group_members/'+g+'/'+u] = true;
       updates['user_groups/'+u+'/'+g] = true;
-    }
+    });
     await update(ref(db), updates);
     groupName.value=''; groupUsers.value='';
     openGroup(g);
     info('Group created/updated.');
   }
-  createGroup.addEventListener('click', createOrAddMembers);
-
-  // NEW: add members later to the current group
-  async function addMembersToCurrent(){
-    if(!me) return info('Use/claim a username first.');
-    if(!currentGroup) return info('Open a group first.');
-    const raw=(addMemberInput.value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
-    if(!raw.length) return;
-    const unique=new Set(raw);
-    const updates={};
-    for(const u of unique){
-      updates['group_members/'+currentGroup+'/'+u] = true;
-      updates['user_groups/'+u+'/'+currentGroup] = true;
-    }
-    await update(ref(db), updates);
-    addMemberInput.value='';
-    info('Member(s) added.');
-  }
-  addMemberBtn.addEventListener('click', addMembersToCurrent);
+  createGroup.onclick = createOrAddMembers;
 
   function openGroup(g){
-    currentGroup=g; localStorage.setItem('cs_last_group', g);
+    currentGroup=g; localStorage.setItem("cs_last_group", g);
     activeGroup.textContent = '#'+g; gNameMono.textContent='#'+g; groupMessages.innerHTML='';
+    setLastReadGroup(g);
 
     if(gmRef && gmCb) off(gmRef, gmCb);
     if(memRef && memCb) off(memRef, memCb);
 
+    // messages
     gmRef = ref(db,'group_messages/'+g);
+    let lastCount = 0;
     gmCb = (snap)=>{
       const d=snap.val()||{}; const arr=Object.values(d).sort((a,b)=>a.ts-b.ts);
+      if(arr.length > lastCount){
+        const latest = arr[arr.length - 1];
+        if(latest && latest.from !== me) playPing();
+      }
+      lastCount = arr.length;
       groupMessages.innerHTML = arr.map(m=>`
         <div class="bubble ${m.from===me?'me':''}">
           <div class="muted mono">@${esc(m.from)}</div>
           <div>${esc(m.text)}</div>
         </div>`).join('');
       groupMessages.scrollTop = groupMessages.scrollHeight;
+      setLastReadGroup(g);
+      badgeGroups.style.display='none';
     };
     onValue(gmRef, gmCb);
 
+    // members
     memRef = ref(db,'group_members/'+g);
     memCb = (snap)=>{
       const d=snap.val()||{}; const list=Object.keys(d).sort();
-      members.innerHTML = list.map(u=>`<div class="groupRow"><div>@${esc(u)}</div></div>`).join('');
+      myMemberList = list;
+      members.innerHTML = list.map(u=>`<div class="userItem"><div>@${esc(u)}</div></div>`).join('');
+      // show/hide Leave button
+      leaveGroupBtn.style.display = list.includes(me) ? 'inline-block' : 'none';
     };
     onValue(memRef, memCb);
+
+    // switch tab to Groups if not visible
+    showGroups();
   }
 
   async function sendToGroup(){
@@ -393,17 +514,95 @@
     await push(ref(db,'group_messages/'+currentGroup), { from: me, text, ts: t() });
     groupMsg.value='';
   }
-  groupSend.addEventListener('click', sendToGroup);
+  groupSend.onclick = sendToGroup;
   groupMsg.addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendToGroup(); } });
 
+  // Add members later to current group
+  async function addMembersToCurrent(){
+    if(!me) return info('Use/claim a username first.');
+    if(!currentGroup) return info('Open a group first.');
+    const raw=(addMemberInput.value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+    if(!raw.length) return;
+    const updates={};
+    raw.forEach(u=>{
+      updates['group_members/'+currentGroup+'/'+u] = true;
+      updates['user_groups/'+u+'/'+currentGroup] = true;
+    });
+    await update(ref(db), updates);
+    addMemberInput.value='';
+    info('Member(s) added.');
+  }
+  addMemberBtn.onclick = addMembersToCurrent;
+
+  // Leave group
+  async function leaveCurrentGroup(){
+    if(!me || !currentGroup) return;
+    const g = currentGroup;
+    const updates = {};
+    updates['group_members/'+g+'/'+me] = null;
+    updates['user_groups/'+me+'/'+g] = null;
+    await update(ref(db), updates);
+    info('You left #'+g);
+    currentGroup = null;
+    activeGroup.textContent = '—';
+    gNameMono.textContent = '—';
+    groupMessages.innerHTML = '';
+    members.innerHTML = '';
+    leaveGroupBtn.style.display = 'none';
+    showMessages(); // go back to Messages tab
+  }
+  leaveGroupBtn.onclick = leaveCurrentGroup;
+
+  /* ================= Registered Users + Presence ================= */
+  function renderRegisteredUsers(targetEl, currentGroupMode=false){
+    onValue(ref(db,'users'), (snapUsers)=>{
+      const allUsers = snapUsers.val()||{};
+      onValue(ref(db,'presence'), (snapPres)=>{
+        const pres = snapPres.val()||{};
+        const names = Object.keys(allUsers).sort();
+        targetEl.innerHTML = names.length ? names.map(u=>{
+          const p = pres[u]||{};
+          const online = p.online ? 'online' : 'offline';
+          return `
+          <div class="userItem">
+            <div class="row">
+              <span class="dot ${online}"></span>
+              <strong>@${esc(u)}</strong>
+            </div>
+            <div class="row">
+              ${currentGroupMode
+                ? `<button class="btn secondary" data-add-to-group="${esc(u)}">Add to Group</button>`
+                : `<button class="btn secondary" data-add-friend="${esc(u)}">Add Friend</button>`
+              }
+            </div>
+          </div>`;
+        }).join('') : '<div class="muted">No registered users yet.</div>';
+      });
+    });
+  }
+  function watchRegisteredUsers(){
+    renderRegisteredUsers(regUsersDM, false);
+    renderRegisteredUsers(regUsersGroups, true);
+  }
+
+  // Global click delegate
+  document.body.addEventListener('click', (e)=>{
+    const a=e.target.getAttribute('data-accept'); if(a){ accept(a); return; }
+    const d=e.target.getAttribute('data-decline'); if(d){ decline(d); return; }
+    const o=e.target.getAttribute('data-open-dm'); if(o){ openDM(o); return; }
+    const g=e.target.getAttribute('data-open-group'); if(g){ openGroup(g); return; }
+    const f=e.target.getAttribute('data-add-friend'); if(f){ findUser.value=f; sendRequest(); return; }
+    const ag=e.target.getAttribute('data-add-to-group'); if(ag){ 
+      if(!currentGroup){ info('Open a group first.'); return; } 
+      update(ref(db), { ['group_members/'+currentGroup+'/'+ag]: true, ['user_groups/'+ag+'/'+currentGroup]: true })
+        .then(()=>info('Added @'+ag+' to #'+currentGroup));
+      return; 
+    }
+  });
+
   // URL auto-claim (?u=alice)
-  const params = new URLSearchParams(location.search);
-  const u = (params.get('u')||'').trim().toLowerCase();
-  if(u && !saved){ meBox.value=u; useOrClaim(); }
+  const params=new URLSearchParams(location.search);
+  const u=params.get("u"); if(u && !savedUser){ meBox.value=u; useOrClaim(); }
 </script>
 </body>
 </html>
-
-
-
-
