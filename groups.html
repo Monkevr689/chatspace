@@ -5,7 +5,7 @@
 <style>
   :root{--bg:#f7f7f8;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--accent:#3b82f6;--danger:#ef4444}
   *{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Arial;background:var(--bg);color:var(--text)}
-  header{background:#fff;border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
+  header{background:#fff;border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
   .nav a{margin-left:8px;text-decoration:none;padding:8px 12px;border:1px solid var(--border);border-radius:999px;color:var(--text)}
   .nav a.active{background:var(--accent);border-color:var(--accent);color:#fff}
   .wrap{max-width:1180px;margin:0 auto;padding:14px}
@@ -26,10 +26,14 @@
 </head><body>
 <header>
   <strong>ChatSpace — Groups</strong>
-  <nav class="nav">
-    <a href="./messages.html">💬 Messages</a>
-    <a class="active" href="./groups.html">👥 Groups</a>
-  </nav>
+  <div class="row">
+    <button id="toggleSound" class="btn">🔊 Sound: <span id="soundState">On</span></button>
+    <button id="enablePush" class="btn">🔔 Enable desktop notifications</button>
+    <nav class="nav">
+      <a href="./messages.html">💬 Messages</a>
+      <a class="active" href="./groups.html">👥 Groups</a>
+    </nav>
+  </div>
 </header>
 
 <div class="wrap">
@@ -85,7 +89,7 @@
       </div>
     </div>
 
-    <!-- Right: Registered Users (with Add to Group buttons) -->
+    <!-- Right: Registered Users (Add to Group buttons) -->
     <div>
       <div class="card">
         <h3>Registered Users</h3>
@@ -98,12 +102,40 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
-import { getDatabase, ref, onValue, off, set, update, push, get, child } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
+import { getDatabase, ref, onValue, off, set, update, push, get, child, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
 
 const app = initializeApp({ databaseURL: "https://my-chat-ddcd1-default-rtdb.firebaseio.com/" });
 const db = getDatabase(app);
 
-// helpers
+// ====== SOUND + PUSH ======
+let soundEnabled = (localStorage.getItem("cs_sound")||"on") === "on";
+const soundStateEl = document.querySelector("#soundState");
+soundStateEl.textContent = soundEnabled ? "On" : "Off";
+let audioCtx = null;
+function ensureAudioCtx(){ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch{} } if(audioCtx&&audioCtx.state==="suspended"){ audioCtx.resume(); } }
+function ding(){
+  if(!soundEnabled) return;
+  ensureAudioCtx(); if(!audioCtx) return;
+  const ctx=audioCtx, o=ctx.createOscillator(), g=ctx.createGain();
+  o.type="square"; o.frequency.setValueAtTime(880, ctx.currentTime);
+  g.gain.setValueAtTime(0.0001, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.12);
+  o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime+0.13);
+}
+document.querySelector("#toggleSound").onclick=()=>{ soundEnabled=!soundEnabled; localStorage.setItem("cs_sound", soundEnabled?"on":"off"); soundStateEl.textContent=soundEnabled?"On":"Off"; if(soundEnabled){ ensureAudioCtx(); ding(); } };
+window.addEventListener("click", ensureAudioCtx, { once:true });
+
+const pushBtn = document.querySelector("#enablePush");
+pushBtn.onclick = async () => {
+  if(!("Notification" in window)) return alert("Notifications not supported in this browser.");
+  const perm = await Notification.requestPermission();
+  if(perm !== "granted") return;
+  new Notification("Desktop notifications enabled 🎉");
+};
+function notify(title, body){ if("Notification" in window && Notification.permission==="granted"){ new Notification(title, { body }); } }
+
+// ====== helpers ======
 const $=s=>document.querySelector(s), t=()=>Date.now();
 const esc = s => (s||"").replace(/[<>&]/g,m=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[m]));
 const info=m=>{const el=$("#status"); el.textContent=m; setTimeout(()=>el.textContent="",2000);};
@@ -118,6 +150,15 @@ const regUsers=$("#registeredUsers");
 
 let me=null, gmRef=null, gmCb=null, memRef=null, memCb=null, currentGroup=null;
 
+// Presence (optional)
+async function startPresence(){
+  if(!me) return;
+  const pRef = ref(db,'presence/'+me);
+  await set(pRef, { online:true, lastSeen: serverTimestamp() });
+  onDisconnect(pRef).set({ online:false, lastSeen: serverTimestamp() });
+  setInterval(()=>{ update(pRef,{online:true,lastSeen:serverTimestamp()}); }, 30000);
+}
+
 async function useOrClaim(){
   const u=(meBox.value||'').trim().toLowerCase(); if(!u) return;
   const s=await get(child(ref(db),'users/'+u));
@@ -126,12 +167,11 @@ async function useOrClaim(){
   history.replaceState({},'',location.pathname+'?u='+me);
   share.textContent=location.origin+location.pathname+'?u='+me;
   info("Using username: "+me);
+  startPresence();
   watchMyGroups(); watchUsers();
   const last = localStorage.getItem("cs_last_group"); if(last) openGroup(last);
 }
 claimBtn.onclick=useOrClaim;
-
-// auto-load
 const saved=(localStorage.getItem("cs_username")||'').trim(); if(saved){ meBox.value=saved; useOrClaim(); }
 
 // my groups
@@ -145,7 +185,7 @@ function watchMyGroups(){
   });
 }
 
-// users + presence (with Add to Group button)
+// users + presence (Add to Group)
 function watchUsers(){
   onValue(ref(db,'users'), (snapUsers)=>{
     const allUsers=snapUsers.val()||{};
@@ -181,9 +221,16 @@ function openGroup(g){
   activeGroup.textContent='#'+g; gNameMono.textContent='#'+g; groupMessages.innerHTML='';
   if(gmRef && gmCb) off(gmRef, gmCb); if(memRef && memCb) off(memRef, memCb);
 
+  // messages (ding when a new one arrives from others)
   gmRef = ref(db,'group_messages/'+g);
+  let lastCount=0;
   gmCb = (snap)=>{
     const d=snap.val()||{}; const arr=Object.values(d).sort((a,b)=>a.ts-b.ts);
+    if(arr.length>lastCount){
+      const latest=arr[arr.length-1];
+      if(latest && latest.from!==me){ ding(); notify(`New message in #${g}`, `@${latest.from}: ${latest.text||''}`); }
+    }
+    lastCount=arr.length;
     groupMessages.innerHTML = arr.map(m=>`
       <div class="bubble ${m.from===me?'me':''}">
         <div class="muted mono">@${esc(m.from)}</div>
@@ -193,11 +240,12 @@ function openGroup(g){
   };
   onValue(gmRef, gmCb);
 
+  // members
   memRef = ref(db,'group_members/'+g);
   memCb = (snap)=>{
     const d=snap.val()||{}; const list=Object.keys(d).sort();
     members.innerHTML = list.map(u=>`<div class="userItem"><div>@${esc(u)}</div></div>`).join('');
-    leaveGroupBtn.style.display = list.includes(me) ? 'inline-block' : 'none';
+    document.querySelector("#leaveGroup").style.display = list.includes(me) ? 'inline-block' : 'none';
   };
   onValue(memRef, memCb);
 }
@@ -213,12 +261,12 @@ groupMsg.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preve
 async function addMembersToCurrent(list){
   if(!me) return info('Use/claim a username first.');
   if(!currentGroup) return info('Open a group first.');
-  const raw=(list || addMemberInput.value || '').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const raw=(list || document.querySelector("#addMemberInput").value || '').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
   if(!raw.length) return;
   const updates={}; raw.forEach(u=>{ updates['group_members/'+currentGroup+'/'+u]=true; updates['user_groups/'+u+'/'+currentGroup]=true; });
-  await update(ref(db),updates); addMemberInput.value=''; info('Member(s) added.');
+  await update(ref(db),updates); document.querySelector("#addMemberInput").value=''; info('Member(s) added.');
 }
-addMemberBtn.onclick=()=>addMembersToCurrent();
+document.querySelector("#addMemberBtn").onclick=()=>addMembersToCurrent();
 
 async function leaveCurrentGroup(){
   if(!me || !currentGroup) return;
@@ -227,12 +275,13 @@ async function leaveCurrentGroup(){
   await update(ref(db),updates);
   info('You left #'+g); currentGroup=null; activeGroup.textContent='—'; gNameMono.textContent='—'; groupMessages.innerHTML=''; members.innerHTML='';
 }
-leaveGroupBtn.onclick=leaveCurrentGroup;
+document.querySelector("#leaveGroup").onclick=leaveCurrentGroup;
 
-// delegated clicks
+// delegates
 document.body.addEventListener('click',(e)=>{
-  const o=e.target.getAttribute('data-open'); if(o) return openGroup(o);
-  const ag=e.target.getAttribute('data-add-to-group'); if(ag) return addMembersToCurrent(ag);
+  const o=e.target.getAttribute('data-open'); if(o){ openGroup(o); return; }
+  const ag=e.target.getAttribute('data-add-to-group'); if(ag){ addMembersToCurrent(ag); return; }
 });
 </script>
 </body></html>
+
