@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ChatSpace — Messages</title>
+<style>
+  :root{--bg:#f7f7f8;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--accent:#3b82f6}
+  *{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Arial;background:var(--bg);color:var(--text)}
+  header{background:#fff;border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
+  .nav a{margin-left:8px;text-decoration:none;padding:8px 12px;border:1px solid var(--border);border-radius:999px;color:var(--text)}
+  .nav a.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .wrap{max-width:1180px;margin:0 auto;padding:14px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;margin:10px 0}
+  .row{display:flex;align-items:center;gap:8px}.row.end{justify-content:flex-end}
+  .input{padding:8px 10px;border-radius:10px;border:1px solid var(--border);flex:1}
+  .btn{padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:#fff;cursor:pointer}
+  .btn.primary{background:var(--accent);color:#fff;border:none}
+  .grid{display:grid;grid-template-columns:320px 1fr 320px;gap:12px}
+  @media(max-width:1100px){.grid{grid-template-columns:1fr}}
+  .list>*+*{border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
+  .bubble{border:1px solid var(--border);border-radius:10px;padding:8px;background:#fff}
+  #dmChat{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto}
+  .me{background:#eef2ff}
+  .userItem{display:flex;align-items:center;justify-content:space-between;padding:8px;border:1px solid var(--border);border-radius:10px}
+  .muted{color:var(--muted)} .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  .dot{width:10px;height:10px;border-radius:50%;margin-right:6px;background:#9ca3af}.dot.online{background:#10b981}
+</style>
+</head><body>
+<header>
+  <strong>ChatSpace — Messages</strong>
+  <nav class="nav">
+    <a class="active" href="./messages.html">💬 Messages</a>
+    <a href="./groups.html">👥 Groups</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <div id="status" class="muted" style="margin:6px 0;"></div>
+
+  <div class="card">
+    <div class="row">
+      <input id="me" class="input" placeholder="choose a username (e.g. alice)">
+      <button id="claim" class="btn primary">Use / Claim</button>
+      <div class="muted mono">Share: <span id="share"></span></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Left: requests + friends -->
+    <div>
+      <div class="card">
+        <h3>Find someone</h3>
+        <div class="row">
+          <input id="findUser" class="input" placeholder="enter username (e.g. bob)">
+          <button id="sendReq" class="btn primary">Add Friend</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Incoming</h3>
+        <div id="incoming" class="list"></div>
+        <h3 style="margin-top:10px">Friends</h3>
+        <div id="friends" class="list"></div>
+      </div>
+    </div>
+
+    <!-- Middle: DM chat -->
+    <div>
+      <div class="card">
+        <h3>Chatting with <span id="dmWith" class="mono">—</span></h3>
+        <div id="dmChat"></div>
+        <div class="row end" style="margin-top:8px">
+          <textarea id="dmMsg" class="input" placeholder="Type a message… (Enter to send)"></textarea>
+          <button id="dmSend" class="btn primary">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Registered Users (with Add Friend buttons) -->
+    <div>
+      <div class="card">
+        <h3>Registered Users</h3>
+        <div id="registeredUsers" class="list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+import { getDatabase, ref, onValue, off, set, update, push, get, child } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
+
+const app = initializeApp({ databaseURL: "https://my-chat-ddcd1-default-rtdb.firebaseio.com/" });
+const db = getDatabase(app);
+
+// helpers
+const $=s=>document.querySelector(s), t=()=>Date.now(), tid=(a,b)=>[a,b].sort().join("__");
+const esc = s => (s||"").replace(/[<>&]/g,m=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[m]));
+const info=m=>{const el=$("#status"); el.textContent=m; setTimeout(()=>el.textContent="",2000);};
+
+// elements
+const meBox=$("#me"), claimBtn=$("#claim"), share=$("#share");
+const incoming=$("#incoming"), friends=$("#friends");
+const findUser=$("#findUser"), sendReq=$("#sendReq");
+const dmWith=$("#dmWith"), dmChat=$("#dmChat"), dmMsg=$("#dmMsg"), dmSend=$("#dmSend");
+const regUsers=$("#registeredUsers");
+
+let me=null, dmRef=null, dmCb=null, currentDM=null;
+
+async function useOrClaim(){
+  const u=(meBox.value||'').trim().toLowerCase(); if(!u) return;
+  const s=await get(child(ref(db),'users/'+u));
+  if(!s.exists()) await set(ref(db,'users/'+u), { createdAt:t() });
+  me=u; localStorage.setItem("cs_username",me);
+  history.replaceState({},'',location.pathname+'?u='+me);
+  share.textContent=location.origin+location.pathname+'?u='+me;
+  info("Using username: "+me);
+  loadDMLists(); watchUsers();
+}
+claimBtn.onclick=useOrClaim;
+
+// auto-load saved
+const saved=(localStorage.getItem("cs_username")||'').trim(); if(saved){ meBox.value=saved; useOrClaim(); }
+
+// lists
+function loadDMLists(){
+  if(!me) return;
+  onValue(ref(db,'requests/'+me),(snap)=>{
+    const d=snap.val()||{};
+    const inc = Object.entries(d).filter(([,r])=>r.status==='pending').map(([from,r])=>({from,ts:r.ts}));
+    incoming.innerHTML = inc.length ? inc.map(r=>`
+      <div class="row"><div>@${esc(r.from)}</div>
+      <button class="btn primary" data-accept="${esc(r.from)}">Accept</button>
+      <button class="btn" data-decline="${esc(r.from)}">Decline</button></div>`).join('') : '<div class="muted">No pending.</div>';
+  });
+  onValue(ref(db,'friendships/'+me),(snap)=>{
+    const f=snap.val()||{}; const arr=Object.keys(f);
+    friends.innerHTML = arr.length ? arr.map(u=>`
+      <div class="row"><div>@${esc(u)}</div>
+      <button class="btn primary" data-open-dm="${esc(u)}">Message</button></div>`).join('') : '<div class="muted">No friends yet.</div>';
+  });
+}
+
+// users + presence (with Add Friend button)
+function watchUsers(){
+  onValue(ref(db,'users'), (snapUsers)=>{
+    const allUsers=snapUsers.val()||{};
+    onValue(ref(db,'presence'), (snapP)=>{
+      const pres=snapP.val()||{};
+      const names=Object.keys(allUsers).sort();
+      regUsers.innerHTML = names.length ? names.map(u=>{
+        const online = pres[u]?.online ? 'online' : '';
+        return `<div class="userItem">
+          <div class="row"><span class="dot ${online}"></span><strong>@${esc(u)}</strong></div>
+          <button class="btn" data-add-friend="${esc(u)}">Add Friend</button>
+        </div>`;
+      }).join('') : '<div class="muted">No registered users yet.</div>';
+    });
+  });
+}
+
+async function sendRequest(targetName){
+  const target = (targetName || findUser.value || '').trim().toLowerCase();
+  if(!target||!me) return;
+  const s=await get(child(ref(db),'users/'+target));
+  if(!s.exists()) return alert('User not found. Ask them to claim a username first.');
+  await set(ref(db,'requests/'+target+'/'+me), { status:'pending', ts:t() });
+  info('Request sent.'); findUser.value='';
+}
+
+async function accept(from){
+  await update(ref(db),{
+    ['requests/'+me+'/'+from+'/status']:'accepted',
+    ['friendships/'+me+'/'+from]:true,
+    ['friendships/'+from+'/'+me]:true
+  });
+  info('Accepted.');
+}
+async function decline(from){
+  await update(ref(db),{ ['requests/'+me+'/'+from+'/status']:'declined' });
+  info('Declined.');
+}
+
+function openDM(peer){
+  currentDM=peer; dmWith.textContent='@'+peer; dmChat.innerHTML='';
+  if(dmRef && dmCb) off(dmRef, dmCb);
+  dmRef = ref(db,'messages/'+tid(me,peer));
+  dmCb = (snap)=>{
+    const msgs=snap.val()||{}; const arr=Object.values(msgs).sort((a,b)=>a.ts-b.ts);
+    dmChat.innerHTML = arr.map(m=>`
+      <div class="bubble ${m.from===me?'me':''}">
+        <div class="muted mono">@${esc(m.from)}</div>
+        <div>${esc(m.text)}</div>
+      </div>`).join('');
+    dmChat.scrollTop = dmChat.scrollHeight;
+  };
+  onValue(dmRef, dmCb);
+}
+async function sendDM(){
+  const text=(dmMsg.value||'').trim(); if(!text||!currentDM) return;
+  await push(ref(db,'messages/'+tid(me,currentDM)), { from: me, to: currentDM, text, ts:t() });
+  dmMsg.value='';
+}
+
+sendReq.onclick=()=>sendRequest();
+dmSend.onclick=sendDM;
+dmMsg.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendDM();}});
+
+document.body.addEventListener('click',(e)=>{
+  const a=e.target.getAttribute('data-accept'); if(a) return accept(a);
+  const d=e.target.getAttribute('data-decline'); if(d) return decline(d);
+  const o=e.target.getAttribute('data-open-dm'); if(o) return openDM(o);
+  const f=e.target.getAttribute('data-add-friend'); if(f) return sendRequest(f);
+});
+</script>
+</body></html>
