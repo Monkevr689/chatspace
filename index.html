@@ -3,17 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ChatSpace — Group Chat (No Login)</title>
-  <meta name="description" content="Groups + realtime chat using Firebase Realtime Database. No login required.">
+  <title>ChatSpace — DMs + Group Chats (No Login)</title>
+  <meta name="description" content="Friend requests & 1:1 chat + group chats using Firebase Realtime Database. No login required.">
   <style>
     :root {--bg:#f7f7f8;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--accent:#3b82f6}
-    *{box-sizing:border-box}
-    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--text)}
+    *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--text)}
     header{background:var(--accent);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:10px;justify-content:space-between}
     header .brand{display:flex;align-items:center;gap:10px}
     header img{height:40px;width:40px;border-radius:50%}
     header h1{font-size:18px;margin:0}
-    .wrap{max-width:1060px;margin:0 auto;padding:16px}
+    .wrap{max-width:1120px;margin:0 auto;padding:16px}
     .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px;margin:10px 0}
     .row{display:flex;align-items:center;gap:8px}
     .row.sb{justify-content:space-between}
@@ -21,25 +20,27 @@
     .btn.primary{background:var(--accent);color:#fff;border:none}
     .btn.primary:hover{opacity:.9}
     .input{padding:8px 10px;border-radius:10px;border:1px solid var(--border);flex:1}
-    .grid{display:grid;grid-template-columns:300px 1fr;gap:12px}
-    @media(max-width:900px){.grid{grid-template-columns:1fr}}
-    .list{display:flex;flex-direction:column;gap:6px}
-    .group{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);border-radius:10px;padding:8px}
-    #messages{display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow:auto}
-    .msg{border:1px solid var(--border);border-radius:10px;padding:8px;background:#fff}
-    .me{background:#eef2ff}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .grid3{display:grid;grid-template-columns:320px 1fr;gap:12px}
+    @media(max-width:980px){.grid3{grid-template-columns:1fr}}
+    .list>*+*{border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
+    textarea{width:100%;min-height:80px;padding:8px;border-radius:10px;border:1px solid var(--border);resize:vertical}
     .muted{color:var(--muted);font-size:13px}
     .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
-    textarea{width:100%;min-height:78px;padding:8px;border:1px solid var(--border);border-radius:10px;resize:vertical}
+    .badge{display:inline-block;padding:2px 8px;border:1px solid var(--border);border-radius:999px;background:#f3f4f6;font-size:12px}
+    #dmChat,#groupMessages{display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow:auto}
+    .bubble{border:1px solid var(--border);border-radius:10px;padding:8px;background:#fff}
+    .me{background:#eef2ff}
+    .groupRow{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);border-radius:10px;padding:8px}
   </style>
 </head>
 <body>
   <header>
     <div class="brand">
       <img src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Chat_icon.png" alt="logo">
-      <h1>ChatSpace — Groups</h1>
+      <h1>ChatSpace — DMs + Groups</h1>
     </div>
-    <div class="muted">Realtime group chat (no login)</div>
+    <div class="muted">Realtime chat (no login)</div>
   </header>
 
   <div class="wrap">
@@ -54,45 +55,105 @@
       </div>
     </div>
 
-    <div class="grid">
-      <!-- left: groups -->
-      <div>
+    <!-- SECTIONS -->
+    <div class="grid2">
+      <!-- DMs -->
+      <section>
         <div class="card">
-          <h3>Create / Join a Group</h3>
-          <div class="row">
-            <input id="groupName" class="input" placeholder="group name (e.g. class7)" />
-            <button id="joinGroup" class="btn primary">Create / Join</button>
-          </div>
-          <p class="muted" style="margin-top:6px">Tip: anyone typing the same group name joins the same room.</p>
-        </div>
+          <h2>Direct Messages</h2>
+          <div class="grid3">
+            <!-- left column -->
+            <div>
+              <div class="card">
+                <h3>Find someone</h3>
+                <div class="row">
+                  <input id="findUser" class="input" placeholder="enter username (e.g. bob)">
+                  <button id="sendReq" class="btn primary">Send Request</button>
+                </div>
+              </div>
 
-        <div class="card">
-          <h3>My Groups</h3>
-          <div id="myGroups" class="list"></div>
-        </div>
+              <div class="card">
+                <h3>Incoming</h3>
+                <div id="incoming" class="list"></div>
+                <h3 style="margin-top:10px">Outgoing</h3>
+                <div id="outgoing" class="list"></div>
+              </div>
 
-        <div class="card">
-          <h3>Members of <span id="gNameMono" class="mono">—</span></h3>
-          <div id="members" class="list"></div>
-        </div>
-      </div>
+              <div class="card">
+                <h3>Friends</h3>
+                <div id="friends" class="list"></div>
+              </div>
+            </div>
 
-      <!-- right: messages -->
-      <div>
-        <div class="card">
-          <h3>Group: <span id="activeGroup" class="mono">—</span></h3>
-          <div id="messages"></div>
-          <div class="row" style="margin-top:10px">
-            <textarea id="msg" placeholder="Type a message… (Enter to send)"></textarea>
-          </div>
-          <div class="row" style="justify-content:flex-end;margin-top:6px">
-            <button id="send" class="btn primary">Send to Group</button>
-          </div>
+            <!-- right column (chat) -->
+            <div>
+              <div class="card">
+                <h3>Chatting with <span id="dmWith" class="mono">—</span></h3>
+                <div id="dmChat"></div>
+                <div style="margin-top:8px;">
+                  <textarea id="dmMsg" placeholder="Type a message… (Enter to send)"></textarea>
+                  <div class="row" style="justify-content:flex-end;margin-top:6px;">
+                    <button id="dmSend" class="btn primary">Send</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div><!-- grid3 -->
         </div>
-      </div>
+      </section>
+
+      <!-- GROUPS -->
+      <section>
+        <div class="card">
+          <h2>Group Chats</h2>
+          <div class="card">
+            <h3>Create / Join group</h3>
+            <div class="row">
+              <input id="groupName" class="input" placeholder="group name (e.g. class7)">
+            </div>
+            <div class="row" style="margin-top:8px">
+              <input id="groupUsers" class="input" placeholder="members (comma-separated usernames)">
+              <button id="createGroup" class="btn primary">Create / Add Members</button>
+            </div>
+            <p class="muted" style="margin-top:6px">Tip: it also adds <em>you</em> as a member automatically.</p>
+          </div>
+
+          <div class="grid3">
+            <!-- left column -->
+            <div>
+              <div class="card">
+                <h3>My Groups</h3>
+                <div id="myGroups" class="list"></div>
+              </div>
+
+              <div class="card">
+                <h3>Members of <span id="gNameMono" class="mono">—</span></h3>
+                <div id="members" class="list"></div>
+              </div>
+            </div>
+
+            <!-- right column (group messages) -->
+            <div>
+              <div class="card">
+                <h3>Group: <span id="activeGroup" class="mono">—</span></h3>
+                <div id="groupMessages"></div>
+                <div class="row" style="margin-top:10px">
+                  <textarea id="groupMsg" placeholder="Message the group… (Enter to send)"></textarea>
+                </div>
+                <div class="row" style="justify-content:flex-end;margin-top:6px">
+                  <button id="groupSend" class="btn primary">Send to Group</button>
+                </div>
+              </div>
+            </div>
+          </div><!-- grid3 -->
+        </div>
+      </section>
+    </div><!-- grid2 -->
+
+    <div class="muted" style="font-size:12px;margin-top:8px">
+      Data paths: 
+      <span class="mono">/users, /requests, /friendships, /messages/{pair}, /groups/{g}, /group_members/{g}/{user}, /user_groups/{user}/{g}, /group_messages/{g}/{autoId}</span>
     </div>
-
-    <p class="muted" style="margin-top:8px">Data paths used: <span class="mono">/groups/{g}, /group_members/{g}/{user}, /user_groups/{user}/{g}, /group_messages/{g}/{autoId}</span></p>
   </div>
 
   <!-- Firebase SDK v10 (no Auth used) -->
@@ -100,7 +161,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
     import { getDatabase, ref, onValue, set, update, push, get, child } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
 
-    // 🔗 Your DB
+    // Your DB (no Auth required)
     const firebaseConfig = {
       databaseURL: "https://my-chat-ddcd1-default-rtdb.firebaseio.com/"
     };
@@ -110,130 +171,214 @@
     // helpers
     const $ = s => document.querySelector(s);
     const t = () => Date.now();
+    const tid = (a,b)=>[a,b].sort().join("__");
     const esc = s => (s||"").replace(/[<>&]/g, m => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]));
 
     // elements
-    const meBox=$('#me'), claimBtn=$('#claim'), share=$('#share'),
-          groupName=$('#groupName'), joinGroupBtn=$('#joinGroup'),
-          myGroups=$('#myGroups'), members=$('#members'),
-          activeGroupLabel=$('#activeGroup'), gNameMono=$('#gNameMono'),
-          messages=$('#messages'), msg=$('#msg'), send=$('#send'),
-          status=$('#status');
+    const status=$('#status');
+    function info(m){status.textContent=m; setTimeout(()=>status.textContent='',2000);}
 
-    let me=null, currentGroup=null;
-    let msgUnsub=null, memUnsub=null;
+    // user
+    const meBox=$('#me'), claimBtn=$('#claim'), share=$('#share');
+    let me=null;
 
-    function info(m){ status.textContent=m; setTimeout(()=>status.textContent='',2000); }
-
-    // Claim username (public, first come first served)
     async function claimUsername(){
       const u=(meBox.value||'').trim().toLowerCase();
       if(!u) return;
-      const s=await get(child(ref(db), 'users/'+u));
-      if(s.exists()){ alert('That username is taken.'); return; }
+      const snap = await get(child(ref(db), 'users/'+u));
+      if(snap.exists()){ alert('That username is taken.'); return; }
       await set(ref(db, 'users/'+u), { createdAt: t() });
       me=u;
       history.replaceState({},'',location.pathname+'?u='+me);
       share.textContent = location.origin + location.pathname + '?u=' + me;
       info('Username set.');
+      loadDMLists();
       watchMyGroups();
     }
+    claimBtn.addEventListener('click', claimUsername);
 
-    // Create or join a group
-    async function joinGroup(){
-      if(!me) return info('Claim a username first.');
-      const g = (groupName.value||'').trim().toLowerCase();
-      if(!g) return;
+    // ====== DMs ======
+    const findUser=$('#findUser'), sendReq=$('#sendReq');
+    const incoming=$('#incoming'), outgoing=$('#outgoing'), friends=$('#friends');
+    const dmWith=$('#dmWith'), dmChat=$('#dmChat'), dmMsg=$('#dmMsg'), dmSend=$('#dmSend');
+    let currentDM=null;
 
-      // ensure group exists
-      await set(ref(db, 'groups/'+g), { createdAt: t() });
-
-      // add membership (both directions for easy lists)
-      await update(ref(db), {
-        ['group_members/'+g+'/'+me]: true,
-        ['user_groups/'+me+'/'+g]: true
-      });
-
-      openGroup(g);
-      groupName.value='';
-      info('Joined '+g);
+    function renderIncoming(list){
+      incoming.innerHTML = list.length ? list.map(r=>`
+        <div class="row sb">
+          <div>@${esc(r.from)}</div>
+          <div class="row">
+            <button class="btn primary" data-accept="${esc(r.from)}">Accept</button>
+            <button class="btn" data-decline="${esc(r.from)}">Decline</button>
+          </div>
+        </div>`).join('') : '<div class="muted">No pending.</div>';
+    }
+    function renderOutgoing(list){
+      outgoing.innerHTML = list.length ? list.map(r=>`
+        <div class="row sb"><div>@${esc(r.to)}</div><span class="badge">${esc(r.status)}</span></div>
+      `).join('') : '<div class="muted">None.</div>';
+    }
+    function renderFriends(list){
+      friends.innerHTML = list.length ? list.map(u=>`
+        <div class="row sb"><div>@${esc(u)}</div><button class="btn primary" data-open-dm="${esc(u)}">Message</button></div>
+      `).join('') : '<div class="muted">No friends yet.</div>';
     }
 
-    // Show my groups
-    function watchMyGroups(){
+    function loadDMLists(){
       if(!me) return;
-      onValue(ref(db, 'user_groups/'+me), (snap)=>{
-        const data = snap.val() || {};
-        const list = Object.keys(data).sort();
-        myGroups.innerHTML = list.length
-          ? list.map(g=>`<div class="group"><div>#${esc(g)}</div><button class="btn primary" data-open="${esc(g)}">Open</button></div>`).join('')
-          : '<div class="muted">You are not in any groups yet.</div>';
+      onValue(ref(db,'requests/'+me),(snap)=>{
+        const d=snap.val()||{};
+        const inc = Object.entries(d).filter(([,r])=>r.status==='pending').map(([from,r])=>({from, ts:r.ts})).sort((a,b)=>b.ts-a.ts);
+        renderIncoming(inc);
+      });
+      onValue(ref(db,'requests'),(snap)=>{
+        const all=snap.val()||{}, out=[];
+        for(const to of Object.keys(all)){
+          const bucket=all[to]||{};
+          if(bucket[me]) out.push({to, status: bucket[me].status, ts: bucket[me].ts});
+        }
+        out.sort((a,b)=>b.ts-a.ts);
+        renderOutgoing(out);
+      });
+      onValue(ref(db,'friendships/'+me),(snap)=>{
+        const f=snap.val()||{}; renderFriends(Object.keys(f));
       });
     }
 
-    // Open a group: subscribe to messages + members
-    function openGroup(g){
-      currentGroup = g;
-      activeGroupLabel.textContent = '#'+g;
-      gNameMono.textContent = '#'+g;
-      messages.innerHTML = '';
+    async function sendRequest(){
+      const target=(findUser.value||'').trim().toLowerCase();
+      if(!target||!me) return;
+      const s=await get(child(ref(db), 'users/'+target));
+      if(!s.exists()) return alert('User not found. Ask them to claim a username first.');
+      await set(ref(db,'requests/'+target+'/'+me), { status:'pending', ts:t() });
+      info('Request sent.'); findUser.value='';
+    }
+    sendReq.addEventListener('click', sendRequest);
 
-      // unsubscribe old listeners if any
-      if (msgUnsub) msgUnsub();  if (memUnsub) memUnsub();
+    async function accept(from){
+      await update(ref(db),{
+        ['requests/'+me+'/'+from+'/status']:'accepted',
+        ['friendships/'+me+'/'+from]: true,
+        ['friendships/'+from+'/'+me]: true
+      });
+      info('Accepted.');
+    }
+    async function decline(from){
+      await update(ref(db),{ ['requests/'+me+'/'+from+'/status']:'declined' });
+      info('Declined.');
+    }
 
-      // messages
-      const msgsRef = ref(db, 'group_messages/'+g);
-      const offMsgs = onValue(msgsRef, (snap)=>{
-        const d=snap.val()||{};
-        const arr = Object.values(d).sort((a,b)=>a.ts-b.ts);
-        messages.innerHTML = arr.map(m=>{
-          const mine = m.from===me ? ' me' : '';
-          return `<div class="msg${mine}">
+    function openDM(peer){
+      currentDM=peer; dmWith.textContent='@'+peer; dmChat.innerHTML='';
+      onValue(ref(db,'messages/'+tid(me,peer)), (snap)=>{
+        const msgs=snap.val()||{}; const arr=Object.values(msgs).sort((a,b)=>a.ts-b.ts);
+        dmChat.innerHTML = arr.map(m=>`
+          <div class="bubble ${m.from===me?'me':''}">
             <div class="muted mono">@${esc(m.from)}</div>
             <div>${esc(m.text)}</div>
-          </div>`;
-        }).join('');
-        messages.scrollTop = messages.scrollHeight;
+          </div>`).join('');
+        dmChat.scrollTop = dmChat.scrollHeight;
       });
-      msgUnsub = () => offMsgs();
-
-      // members
-      const memRef = ref(db, 'group_members/'+g);
-      const offMem = onValue(memRef, (snap)=>{
-        const d=snap.val()||{};
-        const list = Object.keys(d).sort();
-        members.innerHTML = list.map(u=>`<div class="group"><div>@${esc(u)}</div></div>`).join('');
-      });
-      memUnsub = () => offMem();
     }
-
-    // Send message to current group
-    async function sendMessage(){
-      const text = (msg.value||'').trim();
-      if(!text) return;
-      if(!me) return info('Claim a username first.');
-      if(!currentGroup) return info('Open or join a group first.');
-      await push(ref(db, 'group_messages/'+currentGroup), {
-        from: me, text, ts: t()
-      });
-      msg.value='';
+    async function sendDM(){
+      const text=(dmMsg.value||'').trim();
+      if(!text||!currentDM) return;
+      await push(ref(db,'messages/'+tid(me,currentDM)), { from: me, to: currentDM, text, ts: t() });
+      dmMsg.value='';
     }
+    dmSend.addEventListener('click', sendDM);
+    dmMsg.addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendDM(); } });
 
-    // Events
-    claimBtn.addEventListener('click', claimUsername);
-    joinGroupBtn.addEventListener('click', joinGroup);
-    send.addEventListener('click', sendMessage);
-    msg.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }});
-    document.body.addEventListener('click', e=>{
-      const g = e.target.getAttribute('data-open'); if(g) return openGroup(g);
+    // delegate buttons
+    document.body.addEventListener('click', (e)=>{
+      const a=e.target.getAttribute('data-accept'); if(a) return accept(a);
+      const d=e.target.getAttribute('data-decline'); if(d) return decline(d);
+      const o=e.target.getAttribute('data-open-dm'); if(o) return openDM(o);
+      const g=e.target.getAttribute('data-open-group'); if(g) return openGroup(g);
     });
 
-    // Auto-claim via ?u=alice
+    // ====== GROUPS ======
+    const groupName=$('#groupName'), groupUsers=$('#groupUsers'), createGroup=$('#createGroup');
+    const myGroups=$('#myGroups'), members=$('#members'), gNameMono=$('#gNameMono'), activeGroup=$('#activeGroup');
+    const groupMessages=$('#groupMessages'), groupMsg=$('#groupMsg'), groupSend=$('#groupSend');
+
+    let currentGroup=null, unsubMsgs=null, unsubMembers=null;
+
+    function watchMyGroups(){
+      if(!me) return;
+      onValue(ref(db,'user_groups/'+me),(snap)=>{
+        const d=snap.val()||{}; const list=Object.keys(d).sort();
+        myGroups.innerHTML = list.length ? list.map(g=>`
+          <div class="groupRow">
+            <div>#${esc(g)}</div>
+            <button class="btn primary" data-open-group="${esc(g)}">Open</button>
+          </div>`).join('') : '<div class="muted">You are not in any groups yet.</div>';
+      });
+    }
+
+    async function createOrAddMembers(){
+      if(!me) return info('Claim a username first.');
+      const g=(groupName.value||'').trim().toLowerCase();
+      if(!g) return;
+      // ensure group exists
+      await set(ref(db,'groups/'+g), { createdAt: t() });
+
+      // build membership updates (always include self)
+      const raw=(groupUsers.value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+      const unique=new Set([me, ...raw]);
+      const updates={};
+      for(const u of unique){
+        updates['group_members/'+g+'/'+u] = true;
+        updates['user_groups/'+u+'/'+g] = true;
+      }
+      await update(ref(db), updates);
+      groupName.value=''; groupUsers.value='';
+      openGroup(g);
+      info('Group updated.');
+    }
+    createGroup.addEventListener('click', createOrAddMembers);
+
+    function openGroup(g){
+      currentGroup=g; activeGroup.textContent = '#'+g; gNameMono.textContent='#'+g; groupMessages.innerHTML='';
+
+      if (unsubMsgs) unsubMsgs(); if (unsubMembers) unsubMembers();
+
+      // messages
+      const off1 = onValue(ref(db,'group_messages/'+g),(snap)=>{
+        const d=snap.val()||{}; const arr=Object.values(d).sort((a,b)=>a.ts-b.ts);
+        groupMessages.innerHTML = arr.map(m=>`
+          <div class="bubble ${m.from===me?'me':''}">
+            <div class="muted mono">@${esc(m.from)}</div>
+            <div>${esc(m.text)}</div>
+          </div>`).join('');
+        groupMessages.scrollTop = groupMessages.scrollHeight;
+      });
+      unsubMsgs = () => off1();
+
+      // members
+      const off2 = onValue(ref(db,'group_members/'+g),(snap)=>{
+        const d=snap.val()||{}; const list=Object.keys(d).sort();
+        members.innerHTML = list.map(u=>`<div class="groupRow"><div>@${esc(u)}</div></div>`).join('');
+      });
+      unsubMembers = () => off2();
+    }
+
+    async function sendToGroup(){
+      const text=(groupMsg.value||'').trim();
+      if(!text||!currentGroup) return;
+      await push(ref(db,'group_messages/'+currentGroup), { from: me, text, ts: t() });
+      groupMsg.value='';
+    }
+    groupSend.addEventListener('click', sendToGroup);
+    groupMsg.addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendToGroup(); } });
+
+    // auto-claim via ?u=alice
     const params = new URLSearchParams(location.search);
     const u = (params.get('u')||'').trim().toLowerCase();
     if(u){ meBox.value=u; claimUsername(); }
   </script>
 </body>
 </html>
+
 
 
