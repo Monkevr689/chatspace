@@ -1,22 +1,340 @@
-<!doctype html>
-<html><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ChatSpace</title>
-<style>
-  body{margin:0;font-family:system-ui,Segoe UI,Arial;background:#0b1020;color:#eef2ff;display:grid;place-items:center;height:100dvh}
-  .card{background:#11172b;border:1px solid #253052;border-radius:16px;padding:24px;max-width:520px;width:92vw}
-  h1{margin:0 0 14px} p{color:#9aa4c7}
-  .row{display:flex;gap:10px}
-  a{flex:1;text-align:center;text-decoration:none;background:#5b8cff;color:#fff;padding:12px;border-radius:12px}
-</style></head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gravity Escape</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      background: linear-gradient(to bottom, #0f0c29, #302b63, #24243e);
+      font-family: Arial, Helvetica, sans-serif;
+      color: #eee;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      user-select: none;
+    }
+    h1 {
+      margin: 15px 0 8px;
+      font-size: 2.4rem;
+      text-shadow: 0 0 10px #8ff;
+    }
+    #game-container {
+      position: relative;
+      width:  380px;
+      height: 620px;
+      background: #111;
+      border: 3px solid #5af;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 0 40px rgba(90, 180, 255, 0.4);
+    }
+    canvas {
+      display: block;
+    }
+    #ui {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 12px 18px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 1.3rem;
+      pointer-events: none;
+    }
+    #start-screen, #game-over-screen {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      font-size: 1.8rem;
+      transition: opacity 0.6s;
+    }
+    button {
+      padding: 14px 36px;
+      font-size: 1.5rem;
+      background: #0af;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      box-shadow: 0 6px #08c;
+    }
+    button:hover { transform: translateY(-2px); }
+    button:active { transform: translateY(2px); box-shadow: 0 2px #08c; }
+    .hidden { opacity: 0; pointer-events: none; }
+  </style>
+</head>
 <body>
-  <div class="card">
-    <h1>ChatSpace</h1>
-    <p>Choose where you want to go:</p>
-    <div class="row">
-      <a href="./messages.html">💬 Messages</a>
-      <a href="./groups.html">👥 Groups</a>
-    </div>
+
+<h1>Gravity Escape</h1>
+
+<div id="game-container">
+  <canvas id="c" width="380" height="620"></canvas>
+  
+  <div id="ui">
+    <div>Score: <span id="score">0</span></div>
+    <div>Best: <span id="highscore">0</span></div>
   </div>
-</body></html>
+
+  <div id="start-screen">
+    <div>Use ← → or A D or touch left/right</div>
+    <button id="startBtn">START</button>
+  </div>
+
+  <div id="game-over-screen" class="hidden">
+    <div>GAME OVER</div>
+    <div>Score: <span id="finalScore">0</span></div>
+    <button id="restartBtn">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script>
+// ────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const highEl  = document.getElementById('highscore');
+const startScreen = document.getElementById('start-screen');
+const gameOverScreen = document.getElementById('game-over-screen');
+const finalScoreEl = document.getElementById('finalScore');
+
+let score = 0;
+let highscore = localStorage.getItem('gravityEscapeHS') || 0;
+highEl.textContent = highscore;
+
+let player = { x: 170, y: 520, w: 40, h: 40, vx: 0 };
+let keys = {};
+let obstacles = [];
+let stars = [];
+let particles = [];
+let gameRunning = false;
+let lastTime = 0;
+let spawnTimer = 0;
+
+// Controls
+window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+window.addEventListener('keyup',   e => keys[e.key.toLowerCase()] = false);
+
+// Mobile / touch
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const touchX = e.touches[0].clientX;
+  if (touchX < canvas.getBoundingClientRect().left + canvas.width/2)
+    keys['arrowleft'] = keys['a'] = true;
+  else
+    keys['arrowright'] = keys['d'] = true;
+}, {passive:false});
+
+canvas.addEventListener('touchend', () => {
+  keys = {};
+});
+
+// Start & Restart
+document.getElementById('startBtn').onclick = startGame;
+document.getElementById('restartBtn').onclick = startGame;
+
+function startGame() {
+  score = 0;
+  scoreEl.textContent = 0;
+  player.x = 170;
+  player.vx = 0;
+  obstacles = [];
+  stars = [];
+  particles = [];
+  spawnTimer = 0;
+  gameRunning = true;
+  startScreen.classList.add('hidden');
+  gameOverScreen.classList.add('hidden');
+  requestAnimationFrame(gameLoop);
+}
+
+function endGame() {
+  gameRunning = false;
+  if (score > highscore) {
+    highscore = score;
+    localStorage.setItem('gravityEscapeHS', highscore);
+    highEl.textContent = highscore;
+  }
+  finalScoreEl.textContent = score;
+  gameOverScreen.classList.remove('hidden');
+}
+
+// ─── Game loop ──────────────────────────────────────
+function gameLoop(time) {
+  if (!gameRunning) return;
+
+  const dt = (time - lastTime) / 1000;
+  lastTime = time;
+
+  update(dt);
+  draw();
+
+  requestAnimationFrame(gameLoop);
+}
+
+function update(dt) {
+  // Player movement
+  let targetVx = 0;
+  if (keys['arrowleft'] || keys['a']) targetVx -= 380;
+  if (keys['arrowright'] || keys['d']) targetVx += 380;
+  player.vx += (targetVx - player.vx) * 12 * dt;   // smooth accel
+
+  player.x += player.vx * dt;
+  
+  // Keep in bounds
+  if (player.x < 0) {
+    player.x = 0;
+    player.vx = Math.max(0, player.vx);
+  }
+  if (player.x + player.w > canvas.width) {
+    player.x = canvas.width - player.w;
+    player.vx = Math.min(0, player.vx);
+  }
+
+  // Spawn obstacles & stars
+  spawnTimer += dt;
+  if (spawnTimer > 0.9 - score*0.008) {   // gets faster
+    spawnTimer = 0;
+
+    // Obstacle (red falling block)
+    const size = 40 + Math.random()*30;
+    obstacles.push({
+      x: Math.random() * (canvas.width - size),
+      y: -size,
+      w: size,
+      h: size,
+      speed: 180 + score * 8 + Math.random()*80
+    });
+
+    // Star (collectible) ~30% chance
+    if (Math.random() < 0.32) {
+      stars.push({
+        x: Math.random() * (canvas.width - 24),
+        y: -30,
+        size: 24,
+        collected: false
+      });
+    }
+  }
+
+  // Update obstacles
+  for (let i = obstacles.length-1; i >= 0; i--) {
+    const o = obstacles[i];
+    o.y += o.speed * dt;
+
+    // Collision with player
+    if (o.y + o.h > player.y &&
+        o.y < player.y + player.h &&
+        o.x + o.w > player.x &&
+        o.x < player.x + player.w) {
+      endGame();
+      createExplosion(player.x + player.w/2, player.y + player.h/2, '#f44');
+    }
+
+    // Remove when off screen
+    if (o.y > canvas.height + 50) {
+      obstacles.splice(i, 1);
+      score += 2;
+      scoreEl.textContent = score;
+    }
+  }
+
+  // Update stars
+  for (let i = stars.length-1; i >= 0; i--) {
+    const s = stars[i];
+    s.y += 140 * dt;
+
+    // Collect
+    if (!s.collected &&
+        s.y + s.size > player.y &&
+        s.y < player.y + player.h &&
+        s.x + s.size > player.x &&
+        s.x < player.x + player.w) {
+      s.collected = true;
+      score += 10;
+      scoreEl.textContent = score;
+      createExplosion(s.x + s.size/2, s.y + s.size/2, '#ffeb3b');
+    }
+
+    if (s.y > canvas.height + 50) stars.splice(i, 1);
+  }
+
+  // Particles
+  for (let i = particles.length-1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life -= dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function createExplosion(x, y, color) {
+  for (let i = 0; i < 18; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 60 + Math.random() * 140;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 0.6 + Math.random() * 0.7,
+      color
+    });
+  }
+}
+
+function draw() {
+  ctx.fillStyle = 'rgba(17,17,25,0.25)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Player (glowing cyan square + trail)
+  ctx.shadowColor = '#0ff';
+  ctx.shadowBlur = 20;
+  ctx.fillStyle = '#0ff';
+  ctx.fillRect(player.x, player.y, player.w, player.h);
+  ctx.shadowBlur = 0;
+
+  // Obstacles
+  ctx.shadowColor = '#f44';
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = '#c00';
+  for (const o of obstacles) {
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+  }
+  ctx.shadowBlur = 0;
+
+  // Stars
+  ctx.shadowColor = '#ffeb3b';
+  ctx.shadowBlur = 25;
+  ctx.fillStyle = '#ff0';
+  for (const s of stars) {
+    if (s.collected) continue;
+    ctx.beginPath();
+    ctx.arc(s.x + s.size/2, s.y + s.size/2, s.size/2, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+
+  // Particles
+  for (const p of particles) {
+    ctx.globalAlpha = p.life * 1.6;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x-3, p.y-3, 6, 6);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Start the animation loop (but game waits for button)
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
 
