@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PubMed Downloader</title>
+<style>
+:root {
+  --bg: #f5f6f8; --card: #ffffff; --text: #1d1f23; --muted: #6b7280; --line: #e3e5e9;
+  --accent: #1a73b8; --accent-ink: #ffffff; --accent-soft: #e6f0f9; --ok: #1e8a4c;
+  --ok-soft: #e4f4ea; --warn: #a15c00; --warn-soft: #fdf1df; --bad: #c0392b; --bad-soft: #fbe9e7;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181b; --card: #222327; --text: #ececee; --muted: #9ea3ab; --line: #34363c;
+    --accent: #4ea1e6; --accent-ink: #0d1117; --accent-soft: #1d3346; --ok: #4cc07c;
+    --ok-soft: #173326; --warn: #f0a648; --warn-soft: #3a2a12; --bad: #ff7b6b; --bad-soft: #3d1f1b;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+[hidden] { display: none !important; }
+header.top {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px;
+  padding: 10px 24px; background: var(--card); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 16px; }
+.brand svg { width: 28px; height: 28px; }
+nav.tabs { display: flex; gap: 4px; margin-left: 12px; flex: 1; }
+nav.tabs button {
+  border: 0; background: none; color: var(--muted); font: inherit; padding: 7px 12px;
+  border-radius: 8px; cursor: pointer;
+}
+nav.tabs button:hover { color: var(--text); }
+nav.tabs button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.badge-count {
+  display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 10px;
+  background: var(--line); color: var(--text); font-size: 12px; text-align: center;
+}
+main, #job { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+main { padding-bottom: 60px; }
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 22px 24px; margin-top: 20px;
+}
+h2 { margin: 0 0 4px; font-size: 18px; }
+h3 { margin: 0 0 8px; font-size: 17px; }
+.sub { margin: 0 0 18px; color: var(--muted); }
+label { display: block; margin: 14px 0 0; font-weight: 550; }
+label small, legend small { font-weight: 400; color: var(--muted); margin-left: 4px; }
+input[type=text], input[type=number], input[type=password], input[type=search], select, textarea {
+  display: block; width: 100%; margin-top: 6px; padding: 9px 11px; font: inherit; color: var(--text);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 9px;
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent;
+}
+textarea { font-family: var(--mono); font-size: 13px; resize: vertical; }
+.row { display: flex; gap: 14px; flex-wrap: wrap; }
+.row > * { flex: 1 1 180px; }
+fieldset { border: 0; padding: 0; margin: 18px 0 0; }
+legend { font-weight: 550; padding: 0; margin-bottom: 4px; }
+.checks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px; margin: 0; padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: 20px; font-weight: 400; cursor: pointer;
+  user-select: none; background: var(--bg);
+}
+.chip:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.chip input { margin: 0; accent-color: var(--accent); }
+.choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 6px; }
+.choice {
+  margin: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px;
+  font-weight: 400; cursor: pointer; background: var(--bg);
+}
+.choice:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.choice b { display: block; margin-bottom: 2px; }
+.choice span { color: var(--muted); font-size: 13px; }
+.choice input[type=radio] { float: right; accent-color: var(--accent); }
+.choice input[type=number] { margin-top: 8px; padding: 6px 9px; }
+.inline { display: flex; align-items: center; gap: 8px; margin-top: 18px; font-weight: 400; }
+.inline input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+.inline input[type=number] { display: inline-block; width: 100px; margin: 0; padding: 5px 8px; }
+details { margin-top: 18px; }
+summary { cursor: pointer; color: var(--accent); font-weight: 550; }
+.hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+.count {
+  margin-top: 20px; padding: 14px 16px; border-radius: 11px; background: var(--bg);
+  border: 1px solid var(--line);
+}
+.count .big { font-size: 22px; font-weight: 700; }
+.count.good { background: var(--ok-soft); border-color: transparent; }
+.count.bad { background: var(--bad-soft); border-color: transparent; color: var(--bad); }
+.count code { display: block; margin-top: 6px; font: 12px/1.4 var(--mono); color: var(--muted); word-break: break-word; }
+button.primary, button.secondary, button.danger, button.ghost {
+  font: inherit; font-weight: 600; border-radius: 9px; padding: 9px 16px; cursor: pointer;
+  border: 1px solid transparent;
+}
+button.primary { background: var(--accent); color: var(--accent-ink); }
+button.primary:disabled { opacity: .45; cursor: default; }
+button.secondary { background: var(--card); color: var(--text); border-color: var(--line); }
+button.secondary:hover { border-color: var(--muted); }
+button.danger { background: var(--card); color: var(--bad); border-color: var(--line); }
+button.ghost { background: none; color: var(--muted); padding: 7px 12px; }
+button.ghost:hover { color: var(--text); }
+button.link { border: 0; background: none; color: var(--accent); font: inherit; padding: 0; cursor: pointer; }
+button.small { padding: 6px 11px; font-size: 13px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; align-items: center; }
+.big-button { margin-top: 22px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.big-button .primary { padding: 12px 26px; font-size: 16px; }
+/* job panel */
+#job .card { border-color: var(--accent); }
+.job-head { display: flex; align-items: center; gap: 10px; }
+.job-head h3 { margin: 0; flex: 1; }
+.pill { font-size: 12px; font-weight: 650; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+.pill.run { background: var(--accent-soft); color: var(--accent); }
+.pill.done { background: var(--ok-soft); color: var(--ok); }
+.pill.fail { background: var(--bad-soft); color: var(--bad); }
+.pill.paused { background: var(--warn-soft); color: var(--warn); }
+.bar { height: 8px; border-radius: 6px; background: var(--line); margin: 14px 0 8px; overflow: hidden; }
+.bar > div { height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+.bar.indeterminate > div { width: 30%; animation: slide 1.2s infinite ease-in-out; }
+@keyframes slide { from { margin-left: -30%; } to { margin-left: 100%; } }
+.job-text { color: var(--muted); font-size: 14px; }
+.job-msg { margin-top: 10px; }
+.log { margin: 8px 0 0; padding: 10px; max-height: 180px; overflow: auto; background: var(--bg);
+       border-radius: 8px; font: 12px/1.5 var(--mono); white-space: pre-wrap; }
+/* library */
+.empty { text-align: center; color: var(--muted); padding: 40px 10px; }
+.coll-head { display: flex; gap: 10px; align-items: flex-start; }
+.coll-head h3 { flex: 1; margin: 0; word-break: break-word; }
+.coll-query { font: 12px/1.4 var(--mono); color: var(--muted); margin-top: 6px; word-break: break-word; }
+.coll-meta { margin-top: 8px; font-size: 14px; }
+.browse { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+.results { max-height: 560px; overflow-y: auto; margin-top: 6px; }
+.paper { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.paper:last-child { border-bottom: 0; }
+.paper a { color: var(--text); font-weight: 600; text-decoration: none; }
+.paper a:hover { color: var(--accent); text-decoration: underline; }
+.paper .meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.paper .abs { font-size: 14px; margin-top: 6px; }
+.paper pre { white-space: pre-wrap; font: 13px/1.4 var(--mono); margin: 0; }
+.exports { margin-top: 10px; font-size: 13px; color: var(--muted); }
+.exports button { font-size: 13px; }
+/* dialogs */
+dialog {
+  border: 1px solid var(--line); border-radius: 14px; padding: 24px; width: min(520px, 92vw);
+  background: var(--card); color: var(--text); box-shadow: 0 20px 60px rgba(0,0,0,.25);
+}
+dialog::backdrop { background: rgba(0,0,0,.35); }
+dialog .actions { justify-content: flex-end; }
+#closed {
+  position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  background: var(--bg); text-align: center; padding: 20px;
+}
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 40;
+  background: var(--text); color: var(--bg); padding: 10px 18px; border-radius: 10px; font-size: 14px;
+}
+@media (max-width: 640px) {
+  header.top { flex-wrap: wrap; padding: 10px 16px; }
+  nav.tabs { order: 3; flex-basis: 100%; margin: 0; }
+  main, #job { padding: 0 16px; }
+  .card { padding: 18px 16px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#1a73b8"/>
+      <path d="M20 12h17l9 9v31H20z" fill="#fff"/><path d="M37 12v9h9" fill="#cfe3f5"/>
+      <path d="M25 27h15M25 33h15M25 39h9" stroke="#1a73b8" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="44" cy="46" r="10" fill="#1e8a4c"/><path d="M44 40v11m-4.5-4.5L44 51l4.5-4.5" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    PubMed Downloader
+  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="new" class="active">New collection</button>
+    <button role="tab" data-tab="library">Library <span class="badge-count" id="lib-count" hidden></span></button>
+    <button role="tab" data-tab="settings">Settings</button>
+  </nav>
+  <button class="ghost" id="quit" title="Close the app">Quit</button>
+</header>
+
+<div id="job" hidden>
+  <div class="card">
+    <div class="job-head"><h3 id="job-title"></h3><span class="pill" id="job-pill"></span></div>
+    <div class="bar" id="job-bar"><div></div></div>
+    <div class="job-text" id="job-text"></div>
+    <div class="job-msg" id="job-msg"></div>
+    <div class="actions" id="job-actions"></div>
+    <details><summary>Details</summary><div class="log" id="job-log"></div></details>
+  </div>
+</div>
+
+<main>
+  <!-- New collection -->
+  <section id="tab-new">
+    <div class="card">
+      <h2>1. What are you looking for?</h2>
+      <p class="sub">Type keywords. Separate several with commas. Phrases like <i>heart failure</i> are kept together.</p>
+      <label>Papers must mention <b>all</b> of these
+        <input type="text" id="kw-all" placeholder="e.g. intermittent fasting, insulin resistance" autocomplete="off"></label>
+      <label>…and <b>at least one</b> of these <small>optional</small>
+        <input type="text" id="kw-any" placeholder="e.g. diabetes, obesity" autocomplete="off"></label>
+      <label>Leave out papers that mention <small>optional</small>
+        <input type="text" id="kw-none" placeholder="e.g. mice, rats" autocomplete="off"></label>
+      <div class="row">
+        <label>Look for the words in
+          <select id="kw-where">
+            <option value="tiab">Title and abstract (precise)</option>
+            <option value="">Anywhere in the record (broader)</option>
+          </select></label>
+        <label>Published from <small>year</small>
+          <input type="number" id="year-from" placeholder="any year" min="1800" max="2100"></label>
+        <label>to <small>year</small>
+          <input type="number" id="year-to" placeholder="any year" min="1800" max="2100"></label>
+      </div>
+      <fieldset>
+        <legend>Study types <small>pick none to include every type</small></legend>
+        <div class="checks" id="types">
+          <label class="chip"><input type="checkbox" value="randomized controlled trial[pt]">Randomized controlled trials</label>
+          <label class="chip"><input type="checkbox" value="clinical trial[pt]">Clinical trials</label>
+          <label class="chip"><input type="checkbox" value="meta-analysis[pt]">Meta-analyses</label>
+          <label class="chip"><input type="checkbox" value="systematic review[pt]">Systematic reviews</label>
+          <label class="chip"><input type="checkbox" value="review[pt]">Reviews</label>
+          <label class="chip"><input type="checkbox" value="case reports[pt]">Case reports</label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Only include</legend>
+        <div class="checks" id="filters">
+          <label class="chip"><input type="checkbox" value="hasabstract" checked>Papers with an abstract</label>
+          <label class="chip"><input type="checkbox" value="humans[mh]">Human studies</label>
+          <label class="chip"><input type="checkbox" value="english[la]">English</label>
+          <label class="chip"><input type="checkbox" value="free full text[sb]">Free full text available</label>
+        </div>
+      </fieldset>
+      <details id="advanced">
+        <summary>Edit the PubMed search by hand (advanced)</summary>
+        <textarea id="query" rows="3" spellcheck="false"></textarea>
+        <p class="hint">This is built from the boxes above, in PubMed's own search language
+          (the same as on pubmed.ncbi.nlm.nih.gov). Once you edit it, the boxes stop changing it.
+          <button class="link" id="query-reset" hidden>Rebuild it from the boxes</button></p>
+      </details>
+      <div class="count" id="count-box">Type a keyword to see how many papers match.</div>
+    </div>
+
+    <div class="card">
+      <h2>2. Download them</h2>
+      <p class="sub">Papers are saved in compressed files in your <b>PubMed Library</b> folder.</p>
+      <label>Name this collection
+        <input type="text" id="name" placeholder="e.g. Fasting and insulin" autocomplete="off"></label>
+      <fieldset>
+        <legend>How many papers?</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="howmany" value="all" checked><b>All of them</b><span id="all-label">Every matching paper</span></label>
+          <label class="choice"><input type="radio" name="howmany" value="some"><b>Only the newest</b>
+            <input type="number" id="max" value="1000" min="1" aria-label="number of papers"></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>How much detail per paper?</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="detail" value="minimal"><b>Minimal</b><span>Title, year, journal, DOI. Tiny files.</span></label>
+          <label class="choice"><input type="radio" name="detail" value="standard" checked><b>Standard</b><span>Adds the abstract, authors, MeSH topics and keywords. Best for AI.</span></label>
+          <label class="choice"><input type="radio" name="detail" value="full"><b>Everything</b><span>Adds affiliations, pages, study type, PMC ID and more.</span></label>
+        </div>
+      </fieldset>
+      <label class="inline"><input type="checkbox" id="shorten"> Shorten long abstracts to
+        <input type="number" id="abstract-chars" value="1500" min="100"> characters (smaller files)</label>
+      <div class="big-button">
+        <button class="primary" id="start" disabled>Download papers</button>
+        <span class="hint" id="start-hint"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Library -->
+  <section id="tab-library" hidden>
+    <div class="card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px"><h2>Your collections</h2>
+        <p class="sub" style="margin:0">Browse them, turn them into files for AI tools or Excel, or resume a paused download.</p></div>
+      <button class="secondary" id="open-library">Open library folder</button>
+    </div>
+    <div id="library-list"></div>
+  </section>
+
+  <!-- Settings -->
+  <section id="tab-settings" hidden>
+    <div class="card">
+      <h2>Faster downloads</h2>
+      <p class="sub">PubMed lets everyone make 3 requests a second. With a free NCBI API key it's 10,
+        so big downloads finish up to about 3x faster.</p>
+      <ol class="hint" style="font-size:14px">
+        <li>Go to <a href="https://account.ncbi.nlm.nih.gov/settings/" target="_blank" rel="noopener">account.ncbi.nlm.nih.gov/settings</a>
+          and sign in (you can use a Google account) or make a free account.</li>
+        <li>Scroll to <b>API Key Management</b> and click <b>Create an API Key</b>.</li>
+        <li>Copy the key and paste it below.</li>
+      </ol>
+      <label>NCBI API key <small>optional</small>
+        <input type="password" id="api-key" autocomplete="off" placeholder="paste your key here"></label>
+      <label>Your email <small>optional; NCBI likes to know who is downloading a lot</small>
+        <input type="text" id="email" autocomplete="off" placeholder="you@example.com"></label>
+      <div class="actions"><button class="primary" id="save-settings">Save</button><span class="hint" id="settings-msg"></span></div>
+    </div>
+    <div class="card">
+      <h2>Where your papers are</h2>
+      <p class="sub" style="margin-bottom:8px">Each collection is a folder inside:</p>
+      <code id="library-path" style="font-family:var(--mono);font-size:13px"></code>
+      <p class="hint">Papers are stored as compressed <i>.jsonl.xz</i> files to save space. The app reads
+        them for you. Use <b>Export for AI</b> or <b>Spreadsheet</b> in the Library to get files other
+        programs can open.</p>
+      <div class="actions"><button class="secondary" id="open-library-2">Open in Finder</button></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="export-dialog">
+  <h3 id="export-title">Export for AI</h3>
+  <p class="hint" id="export-help" style="font-size:14px"></p>
+  <fieldset id="export-sizes">
+    <legend>Size of each file</legend>
+    <div class="choices" style="grid-template-columns:1fr">
+      <label class="choice"><input type="radio" name="size" value="small"><b>Small: about 20,000 words</b><span>Easy to attach to any chat. More files.</span></label>
+      <label class="choice"><input type="radio" name="size" value="medium" checked><b>Medium: about 100,000 words</b><span>For AI tools that read long documents, like Claude or ChatGPT.</span></label>
+      <label class="choice"><input type="radio" name="size" value="large"><b>Large: about 400,000 words</b><span>For tools that take very big sources, like NotebookLM.</span></label>
+    </div>
+  </fieldset>
+  <label>Only papers that mention <small>optional; e.g. <i>dose</i> or <i>"side effects"</i></small>
+    <input type="text" id="export-filter" autocomplete="off"></label>
+  <div class="actions">
+    <button class="secondary" id="export-cancel">Cancel</button>
+    <button class="primary" id="export-go">Create files</button>
+  </div>
+</dialog>
+
+<dialog id="confirm-dialog">
+  <h3 id="confirm-title"></h3>
+  <p id="confirm-text" class="hint" style="font-size:14px"></p>
+  <div class="actions">
+    <button class="secondary" id="confirm-no">Cancel</button>
+    <button class="danger" id="confirm-yes"></button>
+  </div>
+</dialog>
+
+<div id="closed" hidden>
+  <div><h2>PubMed Downloader is closed</h2>
+    <p class="sub">Open the app again whenever you need it. You can close this tab.</p></div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- basics ----------
+let token = new URLSearchParams(location.hash.slice(1)).get("token");
+try {
+  if (token) sessionStorage.setItem("token", token);
+  else token = sessionStorage.getItem("token");
+} catch (e) { /* private window: keep it in memory */ }
+if (location.hash) history.replaceState(null, "", location.pathname);
+
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => Number(n || 0).toLocaleString();
+
+function h(tag, props, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const child of children.flat()) {
+    if (child == null || child === false) continue;
+    el.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return el;
+}
+
+// replaceChildren, but skipping empty (null/false) entries
+function setKids(el, ...children) {
+  el.replaceChildren(...children.flat().filter((c) => c != null && c !== false && c !== ""));
+}
+
+function size(bytes) {
+  const units = ["B", "KB", "MB", "GB"];
+  let n = bytes || 0, i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return (i ? n.toFixed(1) : n) + " " + units[i];
+}
+
+let closed = false;
+async function api(path, body) {
+  const opts = { headers: { "X-Token": token || "" } };
+  if (body !== undefined) {
+    opts.method = "POST";
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
+  }
+  let res;
+  try { res = await fetch(path, opts); }
+  catch (e) { showClosed(); throw new Error("The app isn't running."); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Something went wrong.");
+  return data;
+}
+
+function showClosed() { closed = true; $("closed").hidden = false; }
+
+let toastTimer;
+function toast(text) {
+  document.querySelectorAll(".toast").forEach((t) => t.remove());
+  const t = h("div", { class: "toast", role: "status" }, text);
+  document.body.append(t);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.remove(), 3500);
+}
+
+function confirmBox(title, text, yes) {
+  return new Promise((resolve) => {
+    $("confirm-title").textContent = title;
+    $("confirm-text").textContent = text;
+    $("confirm-yes").textContent = yes;
+    const dlg = $("confirm-dialog");
+    const done = (v) => { dlg.close(); resolve(v); };
+    $("confirm-yes").onclick = () => done(true);
+    $("confirm-no").onclick = () => done(false);
+    dlg.oncancel = () => resolve(false);
+    dlg.showModal();
+  });
+}
+
+// ---------- tabs ----------
+function showTab(name) {
+  document.querySelectorAll("nav.tabs button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.tab === name));
+  for (const t of ["new", "library", "settings"]) $("tab-" + t).hidden = t !== name;
+  if (name === "library") loadLibrary();
+  if (name === "settings") loadSettings();
+}
+document.querySelectorAll("nav.tabs button").forEach((b) =>
+  b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+// ---------- building the PubMed search ----------
+const terms = (text) => text.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
+
+function tagged(term, field) {
+  if (/\[[a-z ]+\]$/i.test(term)) return term;              // already PubMed syntax
+  const t = /[\s()\-\/]/.test(term) ? '"' + term.replace(/"/g, "") + '"' : term.replace(/"/g, "");
+  return field ? t + "[" + field + "]" : t;
+}
+
+function buildQuery() {
+  const field = $("kw-where").value;
+  const parts = terms($("kw-all").value).map((t) => tagged(t, field));
+  const any = terms($("kw-any").value).map((t) => tagged(t, field));
+  if (any.length) parts.push(any.length > 1 ? "(" + any.join(" OR ") + ")" : any[0]);
+  const types = [...document.querySelectorAll("#types input:checked")].map((i) => i.value);
+  if (!parts.length) return "";
+  if (types.length) parts.push(types.length > 1 ? "(" + types.join(" OR ") + ")" : types[0]);
+  document.querySelectorAll("#filters input:checked").forEach((i) => parts.push(i.value));
+  let q = parts.join(" AND ");
+  const none = terms($("kw-none").value).map((t) => tagged(t, field));
+  if (none.length) q = "(" + q + ") NOT " + (none.length > 1 ? "(" + none.join(" OR ") + ")" : none[0]);
+  return q;
+}
+
+let manualQuery = false, nameEdited = false;
+function currentQuery() { return $("query").value.trim(); }
+
+function refreshQuery() {
+  if (!manualQuery) $("query").value = buildQuery();
+  if (!nameEdited) {
+    const words = terms($("kw-all").value).concat(terms($("kw-any").value)).slice(0, 3);
+    $("name").value = words.join(", ").slice(0, 60);
+  }
+  scheduleCount();
+}
+
+["kw-all", "kw-any", "kw-none", "kw-where"].forEach((id) => $(id).addEventListener("input", refreshQuery));
+["year-from", "year-to"].forEach((id) => $(id).addEventListener("input", scheduleCount));
+document.querySelectorAll("#types input, #filters input").forEach((i) => i.addEventListener("change", refreshQuery));
+$("query").addEventListener("input", () => { manualQuery = true; $("query-reset").hidden = false; scheduleCount(); });
+$("query-reset").addEventListener("click", () => { manualQuery = false; $("query-reset").hidden = true; refreshQuery(); });
+$("name").addEventListener("input", () => { nameEdited = $("name").value.trim() !== ""; });
+
+// ---------- live count ----------
+let countTimer, countSeq = 0, lastCount = 0;
+function scheduleCount() {
+  clearTimeout(countTimer);
+  lastCount = 0;
+  updateStart();
+  const q = currentQuery();
+  const box = $("count-box");
+  box.className = "count";
+  if (!q) {
+    box.textContent = terms($("kw-none").value).length
+      ? "Add at least one word papers must mention."
+      : "Type a keyword to see how many papers match.";
+    return;
+  }
+  box.textContent = "Counting matching papers…";
+  countTimer = setTimeout(runCount, 600);
+}
+
+async function runCount() {
+  const seq = ++countSeq, box = $("count-box");
+  try {
+    const r = await api("/api/count", { query: currentQuery(), from: $("year-from").value, to: $("year-to").value });
+    if (seq !== countSeq) return;
+    lastCount = r.count;
+    box.className = "count " + (r.count ? "good" : "");
+    setKids(box,
+      h("span", { class: "big" }, fmt(r.count)), r.count === 1 ? " paper matches" : " papers match",
+      years() ? " (" + years() + ")" : "",
+      r.count > 100000 ? h("div", { class: "hint" }, "That's a lot: downloading everything can take hours. Progress is saved, so you can stop and resume any time.") : null,
+      r.count === 0 ? h("div", { class: "hint" }, "Try fewer or broader keywords, or search \"Anywhere\".") : null,
+      ...r.notes.map((n) => h("div", { class: "hint" }, n)),
+      h("code", {}, "PubMed search: " + currentQuery()));
+    $("all-label").textContent = "All " + fmt(r.count) + " matching papers";
+  } catch (e) {
+    if (seq !== countSeq) return;
+    box.className = "count bad";
+    box.textContent = e.message;
+  }
+  updateStart();
+}
+
+function years() {
+  const a = $("year-from").value, b = $("year-to").value;
+  if (a && b) return a + "–" + b;
+  if (a) return "from " + a;
+  if (b) return "up to " + b;
+  return "";
+}
+
+// ---------- starting a download ----------
+let job = null;
+const jobRunning = () => job && job.state === "running";
+
+function updateStart() {
+  const btn = $("start"), hint = $("start-hint");
+  btn.disabled = !lastCount || jobRunning();
+  if (jobRunning()) hint.textContent = "Wait for the current job to finish (or stop it).";
+  else if (!lastCount) hint.textContent = "";
+  else {
+    const want = radio("howmany") === "some" ? Math.min(lastCount, +$("max").value || 0) : lastCount;
+    hint.textContent = "Will download " + fmt(want) + " papers.";
+  }
+}
+document.querySelectorAll("input[name=howmany]").forEach((i) => i.addEventListener("change", updateStart));
+$("max").addEventListener("input", () => { document.querySelector("input[name=howmany][value=some]").checked = true; updateStart(); });
+$("abstract-chars").addEventListener("input", () => { $("shorten").checked = true; });
+
+function radio(name) { return document.querySelector("input[name=" + name + "]:checked").value; }
+
+$("start").addEventListener("click", async () => {
+  const body = {
+    query: currentQuery(),
+    name: $("name").value.trim(),
+    from: $("year-from").value, to: $("year-to").value,
+    max: radio("howmany") === "some" ? $("max").value : null,
+    detail: radio("detail"),
+    abstract_chars: $("shorten").checked ? $("abstract-chars").value : null,
+    form: { all: $("kw-all").value, any: $("kw-any").value, none: $("kw-none").value },
+  };
+  try {
+    job = await api("/api/download", body);
+    renderJob();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } catch (e) { toast(e.message); }
+});
+
+// ---------- the job panel ----------
+function renderJob() {
+  const panel = $("job");
+  if (!job) { panel.hidden = true; return; }
+  panel.hidden = false;
+  const running = job.state === "running";
+  $("job-title").textContent = job.kind === "export" ? job.title : "Downloading “" + job.title + "”";
+  const pill = $("job-pill");
+  const pills = { running: ["Working…", "run"], done: ["Finished", "done"], failed: ["Problem", "fail"], cancelled: ["Stopped", "paused"] };
+  pill.textContent = pills[job.state][0];
+  pill.className = "pill " + pills[job.state][1];
+
+  const bar = $("job-bar");
+  const known = job.total > 0;
+  bar.hidden = !running;
+  bar.classList.toggle("indeterminate", running && !known);
+  bar.firstElementChild.style.width = known ? (100 * job.done / job.total).toFixed(1) + "%" : "";
+
+  let text = "";
+  if (running) {
+    if (job.kind === "export") text = "Writing files… " + (job.status || "");
+    else if (job.phase === "search") text = "Finding papers… " + fmt(job.done) + " of " + fmt(job.total) + " listed";
+    else if (job.phase === "download" && known) {
+      const eta = (job.status.match(/about (.+) left/) || [])[1];
+      text = "Downloaded " + fmt(job.done) + " of " + fmt(job.total) + " papers" + (eta ? " · about " + eta + " left" : "");
+    } else text = "Searching PubMed…";
+  }
+  $("job-text").textContent = text;
+
+  const msg = $("job-msg"), actions = $("job-actions");
+  msg.replaceChildren(); actions.replaceChildren();
+  const r = job.result || {};
+  if (running) {
+    actions.append(h("button", { class: "secondary", onclick: stopJob }, "Stop"));
+  } else if (job.state === "done" && job.kind === "download") {
+    const saved = r.raw_bytes ? Math.round(100 - 100 * r.bytes / r.raw_bytes) : 0;
+    msg.append(h("b", {}, "Saved " + fmt(r.records) + " papers"), " in " + size(r.bytes) +
+      (saved > 0 ? " (" + saved + "% smaller than plain text)." : "."));
+    actions.append(
+      h("button", { class: "primary", onclick: () => openExport(job.folder, "ai") }, "Export for AI"),
+      h("button", { class: "secondary", onclick: () => reveal(job.folder) }, "Show in Finder"),
+      h("button", { class: "secondary", onclick: () => showTab("library") }, "Go to library"),
+      h("button", { class: "ghost", onclick: dismissJob }, "Close"));
+  } else if (job.state === "done") {
+    msg.append(r.zip
+      ? h("span", {}, h("b", {}, fmt(r.papers) + " papers"), " in " + r.files.length + " Markdown file" + (r.files.length > 1 ? "s" : "") +
+          " (about " + fmt(r.words) + " words) plus one zip. Attach the files to ChatGPT, Claude or Gemini, or add them as sources in NotebookLM.")
+      : h("span", {}, h("b", {}, fmt(r.papers) + " papers"), " saved in a spreadsheet that opens in Excel or Numbers."));
+    actions.append(
+      h("button", { class: "primary", onclick: () => reveal(job.folder, r.zip || r.export) }, "Show in Finder"),
+      h("button", { class: "ghost", onclick: dismissJob }, "Close"));
+  } else {
+    msg.append(job.state === "cancelled"
+      ? (job.kind === "download" ? "Stopped. Finished files are kept: resume it any time from the Library." : "Stopped.")
+      : h("span", { style: "color:var(--bad)" }, job.message));
+    if (job.state === "cancelled" && job.kind === "download")
+      actions.append(h("button", { class: "secondary", onclick: () => resume(job.folder) }, "Resume"));
+    actions.append(h("button", { class: "ghost", onclick: dismissJob }, "Close"));
+  }
+  $("job-log").textContent = job.lines.join("\n");
+  updateStart();
+}
+
+async function stopJob() {
+  try { job = (await api("/api/cancel", {})).job; renderJob(); } catch (e) { toast(e.message); }
+}
+function dismissJob() { dismissed = job && job.started; job = null; renderJob(); updateStart(); }
+let dismissed = null;
+
+let wasRunning = false;
+async function poll() {
+  if (closed) return;
+  try {
+    const s = await api("/api/state");
+    $("library-path").textContent = s.library;
+    if (s.job && s.job.started !== dismissed) job = s.job;
+    renderJob();
+    if (wasRunning && !jobRunning()) loadLibrary();
+    wasRunning = jobRunning();
+  } catch (e) { /* shown by api() */ }
+  setTimeout(poll, jobRunning() ? 1000 : 4000);
+}
+
+// ---------- library ----------
+async function loadLibrary() {
+  let data;
+  try { data = await api("/api/library"); } catch (e) { return; }
+  const list = $("library-list");
+  const badge = $("lib-count");
+  badge.hidden = !data.items.length;
+  badge.textContent = data.items.length;
+  if (!data.items.length) {
+    list.replaceChildren(h("div", { class: "card empty" }, "No collections yet. Start one in ", h("button", { class: "link", onclick: () => showTab("new") }, "New collection"), "."));
+    return;
+  }
+  const open = new Set([...list.querySelectorAll(".browse:not([hidden])")].map((b) => b.dataset.folder));
+  list.replaceChildren(...data.items.map((item) => collectionCard(item, open.has(item.folder))));
+}
+
+function collectionCard(item, browsing) {
+  let pill;
+  if (item.running) pill = h("span", { class: "pill run" }, "Downloading…");
+  else if (item.complete) pill = h("span", { class: "pill done" }, "Complete");
+  else pill = h("span", { class: "pill paused" }, "Paused: " + fmt(item.fetched) + " of " + fmt(item.pmids));
+  const when = item.created ? new Date(item.created).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "";
+  const range = item.from || item.to ? "Years " + (item.from || "…").slice(0, 4) + "–" + (item.to || "…").slice(0, 4) : "";
+  const meta = [fmt(item.records) + " papers", size(item.bytes), when, range].filter(Boolean).join(" · ");
+
+  const browse = h("div", { class: "browse", "data-folder": item.folder, hidden: !browsing });
+  const actions = h("div", { class: "actions" },
+    h("button", { class: "secondary small", onclick: () => toggleBrowse(browse, item) }, "Browse"),
+    h("button", { class: "primary small", disabled: item.running || !item.records, onclick: () => openExport(item.folder, "ai") }, "Export for AI"),
+    h("button", { class: "secondary small", disabled: item.running || !item.records, onclick: () => openExport(item.folder, "csv") }, "Spreadsheet"),
+    h("button", { class: "secondary small", onclick: () => reveal(item.folder) }, "Show in Finder"),
+    !item.complete && !item.running ? h("button", { class: "secondary small", onclick: () => resume(item.folder) }, "Resume download") : null,
+    h("button", { class: "danger small", disabled: item.running, onclick: () => remove(item) }, "Delete"));
+
+  const exports = item.exports.length ? h("div", { class: "exports" }, "Exports: ",
+    ...item.exports.slice(0, 4).flatMap((name, i) => [i ? ", " : "", h("button", { class: "link", onclick: () => reveal(item.folder, name) }, name)]),
+    item.exports.length > 4 ? " and " + (item.exports.length - 4) + " more" : "") : null;
+
+  const card = h("div", { class: "card" },
+    h("div", { class: "coll-head" }, h("h3", {}, item.name), pill),
+    h("div", { class: "coll-query" }, item.query),
+    h("div", { class: "coll-meta" }, meta), exports, actions, browse);
+  if (browsing) fillBrowse(browse, item);
+  return card;
+}
+
+function toggleBrowse(box, item) {
+  box.hidden = !box.hidden;
+  if (!box.hidden && !box.childElementCount) fillBrowse(box, item);
+}
+
+function fillBrowse(box, item) {
+  const input = h("input", { type: "search", placeholder: "Search these papers, e.g. dose or \"side effects\"" });
+  const results = h("div", { class: "results" });
+  let timer;
+  const run = async () => {
+    results.replaceChildren(h("p", { class: "hint" }, "Searching…"));
+    try {
+      const r = await api("/api/papers?" + new URLSearchParams({ folder: item.folder, q: input.value, limit: 50 }));
+      if (!r.papers.length) { results.replaceChildren(h("p", { class: "hint" }, "No papers match.")); return; }
+      setKids(results, r.papers.map(paperRow),
+        r.more ? h("p", { class: "hint" }, "Showing the first 50. Type more words to narrow it down.") : null);
+    } catch (e) { results.replaceChildren(h("p", { class: "hint" }, e.message)); }
+  };
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 350); });
+  box.replaceChildren(input, results);
+  run();
+}
+
+function paperRow(p) {
+  if (p.text) return h("div", { class: "paper" }, h("pre", {}, p.text));
+  const authors = Array.isArray(p.authors) ? p.authors : (p.authors ? String(p.authors).split("; ") : []);
+  const meta = [p.journal || p.journal_abbrev, p.year,
+    authors.length ? authors.slice(0, 3).join(", ") + (authors.length > 3 ? " et al." : "") : ""].filter(Boolean).join(" · ");
+  const abs = p.abstract || "";
+  const absEl = h("div", { class: "abs" }, abs.length > 420 ? abs.slice(0, 420) + "… " : abs);
+  if (abs.length > 420) absEl.append(h("button", { class: "link", onclick: () => { absEl.textContent = abs; } }, "more"));
+  return h("div", { class: "paper" },
+    h("a", { href: "https://pubmed.ncbi.nlm.nih.gov/" + encodeURIComponent(p.pmid) + "/", target: "_blank", rel: "noopener" }, p.title || "(untitled)"),
+    h("div", { class: "meta" }, meta || "PMID " + p.pmid), abs ? absEl : null);
+}
+
+async function reveal(folder, exportName) {
+  try { await api("/api/reveal", { folder: folder || null, export: exportName || null }); }
+  catch (e) { toast(e.message); }
+}
+
+async function resume(folder) {
+  try { job = await api("/api/resume", { folder }); dismissed = null; renderJob(); loadLibrary(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  catch (e) { toast(e.message); }
+}
+
+async function remove(item) {
+  const ok = await confirmBox("Delete “" + item.name + "”?",
+    "This deletes its " + fmt(item.records) + " saved papers and any exports from your computer.", "Delete");
+  if (!ok) return;
+  try { await api("/api/delete", { folder: item.folder }); toast("Deleted."); loadLibrary(); }
+  catch (e) { toast(e.message); }
+}
+
+$("open-library").addEventListener("click", () => reveal());
+$("open-library-2").addEventListener("click", () => reveal());
+
+// ---------- export dialog ----------
+let exportTarget = null;
+function openExport(folder, kind) {
+  exportTarget = { folder, kind };
+  const ai = kind === "ai";
+  $("export-title").textContent = ai ? "Export for AI" : "Export a spreadsheet";
+  $("export-help").textContent = ai
+    ? "Creates plain-text Markdown files you can attach to ChatGPT, Claude or Gemini, or add as sources in NotebookLM, plus one .zip with all of them. Big collections are split over several files."
+    : "Creates one CSV file with a row per paper. It opens in Excel, Numbers or Google Sheets.";
+  $("export-sizes").hidden = !ai;
+  $("export-filter").value = "";
+  $("export-dialog").showModal();
+}
+$("export-cancel").addEventListener("click", () => $("export-dialog").close());
+$("export-go").addEventListener("click", async () => {
+  $("export-dialog").close();
+  try {
+    job = await api("/api/export", { folder: exportTarget.folder, kind: exportTarget.kind, size: radio("size"), filter: $("export-filter").value });
+    dismissed = null;
+    renderJob();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } catch (e) { toast(e.message); }
+});
+
+// ---------- settings ----------
+async function loadSettings() {
+  try {
+    const s = await api("/api/settings");
+    $("api-key").value = s.api_key; $("email").value = s.email;
+  } catch (e) { /* shown by api() */ }
+}
+$("save-settings").addEventListener("click", async () => {
+  try {
+    await api("/api/settings", { api_key: $("api-key").value, email: $("email").value });
+    $("settings-msg").textContent = "Saved.";
+    setTimeout(() => { $("settings-msg").textContent = ""; }, 2500);
+  } catch (e) { $("settings-msg").textContent = e.message; }
+});
+
+// ---------- quit ----------
+$("quit").addEventListener("click", async () => {
+  if (jobRunning() && !(await confirmBox("Quit while working?",
+    "The current job will stop. Downloads can be resumed later from the Library.", "Quit"))) return;
+  try { await api("/api/quit", {}); } catch (e) { /* already gone */ }
+  showClosed();
+});
+
+if (!token) {
+  $("count-box").textContent = "Open this page from the PubMed Downloader app.";
+} else {
+  poll();
+  loadLibrary();
+}
+</script>
+</body>
+</html>
