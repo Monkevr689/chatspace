@@ -1,0 +1,3 @@
+__pycache__/
+# Download folders (the default name is pubmed_<search>)
+pubmed_*/
