@@ -400,6 +400,22 @@ class DownloadTests(ServerTestCase):
         self.assertIn("HTTP 400", err)
         self.assertIn("API key invalid", err)
 
+    def test_export_command(self):
+        out = self.dir / "ex"
+        self.cli("download", "tumor", "-o", str(out))
+        code, _, err = self.cli("export", str(out), "--words", "600", "-o", str(self.dir / "ai"))
+        self.assertEqual(code, 0, err)
+        files = sorted((self.dir / "ai").glob("papers-*.md"))
+        self.assertGreater(len(files), 1)
+        self.assertTrue(all(len(f.read_text().split()) <= 700 for f in files))
+        text = "".join(f.read_text() for f in files)
+        self.assertEqual(text.count("\n## Study "), 50)
+        self.assertTrue((self.dir / "ai.zip").exists())
+        code, _, err = self.cli("export", str(out), "--as", "csv", "--grep", "study 4")
+        self.assertEqual(code, 0, err)
+        (csv_file,) = (out / "exports").glob("spreadsheet *.csv")
+        self.assertEqual(len(csv_file.read_text(encoding="utf-8-sig").splitlines()), 1 + 11)
+
     def test_count_and_no_results(self):
         code, text, _ = self.cli("count", "tumor")
         self.assertEqual((code, text.splitlines()[0]), (0, "50 papers match"))

@@ -1,0 +1,30 @@
+PubMed Downloader for Mac
+=========================
+
+1. Drag "PubMed Downloader" into your Applications folder (optional).
+
+2. Double-click it. The first time, macOS warns that it can't check the
+   app, because it isn't from the App Store. To allow it (only once):
+
+   macOS 15 Sequoia or newer:
+     - Click "Done" on the warning.
+     - Open System Settings > Privacy & Security.
+     - Scroll down to the message about PubMed Downloader, click
+       "Open Anyway", and confirm.
+
+   macOS 14 or older:
+     - Right-click (or Control-click) the app, choose "Open", then
+       click "Open" again.
+
+3. If your Mac doesn't have Python yet, the app offers to install it.
+   Click "Install", wait for it to finish, then open the app again.
+
+4. The app opens in your web browser. Your papers are saved in the
+   "PubMed Library" folder in your home folder.
+
+To close the app, click "Quit" at the top right of its window. It also
+closes by itself about 20 minutes after you close the browser tab
+(unless a download is still running).
+
+Something wrong? The app writes a log to:
+  ~/Library/Logs/PubMed Downloader/app.log

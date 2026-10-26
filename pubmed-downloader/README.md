@@ -1,20 +1,102 @@
-# PubMed bulk downloader
+# PubMed Downloader
 
-Download as many PubMed papers as you want, on any topic, and save them as
-small compressed files that hold only the details you care about.
+Download as many PubMed papers as you want, on any topic, keep them in small
+compressed files, and turn them into files you can give to an AI (ChatGPT,
+Claude, Gemini, NotebookLM) or open in Excel.
 
-- **Any search**: the same search syntax you use on pubmed.ncbi.nlm.nih.gov.
+- **Pick papers by keyword**: type the words papers must (or must not)
+  mention, pick study types and years, and see live how many papers match.
 - **No 10,000 cap**: PubMed only lists the first 9,999 hits of a search, so
-  bigger searches are split by date automatically.
-- **Small files**: you choose which fields to keep, can shorten abstracts, and
-  the output is split into compressed chunks (1,000 papers per file by
-  default, compressed with xz).
-- **Resumable**: if it gets interrupted, run the same command again and it
-  carries on from the last finished file.
-- **Nothing to install**: a single Python file, standard library only
-  (Python 3.8 or newer).
+  bigger searches are split by date automatically. Downloads of hundreds of
+  thousands of papers work; they just take a while.
+- **Small files**: choose how much detail to keep per paper, optionally
+  shorten abstracts, and everything is stored compressed.
+- **Ready for AI**: one click turns a collection (or only the papers
+  mentioning certain words) into Markdown files sized for AI tools, plus a
+  zip of them.
+- **Resumable**: stop any time and carry on later from where it stopped.
 
-## Quick start
+There are two ways to use it: the **Mac app** (no Terminal) or the
+**command line** (any computer).
+
+## Mac app (no Terminal needed)
+
+### Setting it up (once)
+
+1. Download **[PubMed-Downloader-Mac.zip](PubMed-Downloader-Mac.zip)**
+   (on GitHub, open the file and click the download button), then
+   double-click it in your Downloads folder.
+2. Drag **PubMed Downloader** into your **Applications** folder.
+3. Double-click it. The first time, macOS warns that it can't check the app,
+   because it isn't from the App Store. Allow it once:
+   - **macOS 15 Sequoia or newer:** click *Done*, open **System Settings →
+     Privacy & Security**, scroll down to the message about PubMed
+     Downloader, click **Open Anyway**, and confirm.
+   - **macOS 14 or older:** right-click (or Control-click) the app, choose
+     **Open**, then click **Open** again.
+4. If your Mac doesn't have Python yet, the app offers to install it. Click
+   **Install**, wait a few minutes for it to finish, then open the app again.
+   (Or install Python yourself from
+   [python.org](https://www.python.org/downloads/macos/).)
+
+That's it. From then on, just double-click the app.
+
+### Using it
+
+The app opens in your web browser (it runs only on your own Mac; nothing is
+sent anywhere except searches to PubMed).
+
+1. **New collection**: type your keywords, for example *must mention*
+   `intermittent fasting, insulin` and *leave out* `mice, rats`. Pick years
+   and study types if you like. The box at the bottom shows how many papers
+   match.
+2. Choose how many papers (all, or only the newest N) and how much detail
+   (Minimal, Standard or Everything), then click **Download papers**. You can
+   keep using the app, or close the tab, while it works. Click **Stop** any
+   time and **Resume** later.
+3. **Library**: browse and search your collections, see where they are in
+   Finder, and export them:
+   - **Export for AI** makes Markdown (`.md`) files plus one `.zip`. Choose
+     the file size: *Small* (~20,000 words, easy to attach to any chat),
+     *Medium* (~100,000 words, for tools that read long documents) or
+     *Large* (~400,000 words, for tools that take very big sources like
+     NotebookLM). You can export only the papers that mention certain words.
+   - **Spreadsheet** makes one CSV file that opens in Excel or Numbers.
+4. **Settings**: paste a free NCBI API key to download up to ~3x faster (the
+   page explains how to get one).
+
+Your collections are in the **PubMed Library** folder in your home folder.
+Click **Quit** at the top right to close the app. It also closes by itself
+about 20 minutes after you close the tab, unless a download is running.
+
+### Giving your papers to an AI
+
+- **ChatGPT, Claude, Gemini**: start a chat, attach one or more of the
+  `papers-001.md` files (paperclip or "+" button), and ask your question, for
+  example *"Summarise what these studies found about insulin resistance, and
+  cite PMIDs."* For a big collection, export with a keyword filter or use a
+  project/knowledge feature so the AI can work across many files.
+- **NotebookLM**: create a notebook and add the `.md` files as sources
+  (choose the *Large* size so you need fewer files).
+- Every paper in the files starts with its title, then PMID, year, journal
+  and DOI, so the AI can point you back to the original papers.
+- AI tools have limits on how much text they read at once. If a collection
+  is too big, narrow it down: export only papers mentioning a keyword, or
+  download fewer papers.
+
+### If something goes wrong
+
+- The app keeps a log at `~/Library/Logs/PubMed Downloader/app.log`
+  (in Finder: **Go → Go to Folder…** and paste that path).
+- "Couldn't reach PubMed": check your internet connection.
+- The browser tab says the app is closed: double-click the app again.
+
+## Command line
+
+The same engine also works from the Terminal on any computer with Python 3.8
+or newer. Nothing to install.
+
+### Quick start
 
 ```bash
 python3 pubmed_dl.py
@@ -25,7 +107,7 @@ papers, which folder) and then downloads. It also prints the full command, so
 next time you can skip the questions. On Windows, type `python` or `py`
 instead of `python3`.
 
-## Commands
+### Commands
 
 **Check how big a search is first:**
 
@@ -61,9 +143,23 @@ python3 pubmed_dl.py read crispr2023 --grep "base editing" --count
 python3 pubmed_dl.py read crispr2023 --as csv > crispr2023.csv
 ```
 
+**Make AI-ready files or a spreadsheet:**
+
+```bash
+python3 pubmed_dl.py export crispr2023                       # Markdown files + zip, ~100k words each
+python3 pubmed_dl.py export crispr2023 --words 20000 --grep mice
+python3 pubmed_dl.py export crispr2023 --as csv              # one Excel-friendly CSV
+```
+
+**Run the app on any computer** (it opens in your browser):
+
+```bash
+python3 pubmed_app.py
+```
+
 Run any command with `-h` to see every option.
 
-## Search tips
+### Search tips
 
 | You want | Type |
 | --- | --- |
@@ -78,7 +174,7 @@ Run any command with `-h` to see every option.
 
 Put the whole search in quotes on the command line.
 
-## Download options
+### Download options
 
 | Option | What it does |
 | --- | --- |
@@ -97,7 +193,7 @@ Put the whole search in quotes on the command line.
 | `--api-key KEY` | Your NCBI API key, for faster downloads (see below) |
 | `--email ADDRESS` | Your email; NCBI asks heavy users for one |
 
-### Fields
+#### Fields
 
 | Level | Fields |
 | --- | --- |
@@ -111,7 +207,7 @@ All fields: `pmid`, `title`, `abstract`, `authors`, `affiliations`,
 The `pmid` is always kept. Empty fields are left out of the jsonl files to
 save space.
 
-## What you get
+### What you get
 
 ```
 crispr2023/
@@ -131,7 +227,7 @@ Each line of a jsonl file is one paper:
 When it finishes, the tool tells you how many papers it saved, how big the
 files are in total, and how much smaller they are than the uncompressed text.
 
-### Using the files in other programs
+#### Using the files in other programs
 
 - **Python / pandas** reads the compressed files directly:
 
@@ -151,7 +247,7 @@ files are in total, and how much smaller they are than the uncompressed text.
 - **Unzipping by hand**: `.xz` and `.gz` files open with 7-Zip (Windows),
   The Unarchiver (Mac), or `xz -dk` / `gunzip -k` (Linux/Mac terminal).
 
-## Speed, limits and being polite to NCBI
+### Speed, limits and being polite to NCBI
 
 - Without an API key NCBI allows 3 requests a second; with one, 10. The tool
   waits between requests on its own and fetches 200 papers per request. A
@@ -175,10 +271,16 @@ files are in total, and how much smaller they are than the uncompressed text.
   files at https://ftp.ncbi.nlm.nih.gov/pubmed/baseline/ are a better fit
   than searching.
 
-## Running the tests
+## For developers
 
-The tests use a small fake NCBI server, so they run offline:
+- `pubmed_dl.py`: the download engine and command line.
+- `pubmed_app.py` + `pubmed_app.html`: the app (a small web server bound to
+  127.0.0.1, protected by a random token).
+- `mac/`: the Mac app's launcher script, Info.plist, icon and read-me.
+  `build_mac_app.py` packs them with the Python files into
+  `PubMed-Downloader-Mac.zip`; rerun it after changing any of those files.
+- Tests use a small fake NCBI server, so they run offline:
 
-```bash
-python3 -m unittest discover -s tests -v
-```
+  ```bash
+  python3 -m unittest discover -s tests -v
+  ```

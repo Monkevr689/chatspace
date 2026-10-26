@@ -25,6 +25,8 @@ import lzma
 import os
 import re
 import shlex
+import ssl
+import subprocess
 import sys
 import textwrap
 import time
@@ -32,6 +34,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -85,6 +88,23 @@ class _Retry(Exception):
 # Talking to NCBI
 
 
+def _ssl_context():
+    """HTTPS settings. Python from python.org on a Mac has no root
+    certificates until its "Install Certificates" step is run, so fall back
+    to the ones macOS itself trusts."""
+    context = ssl.create_default_context()
+    if sys.platform == "darwin" and not context.cert_store_stats()["x509_ca"]:
+        try:
+            pem = subprocess.run(
+                ["/usr/bin/security", "find-certificate", "-a", "-p",
+                 "/System/Library/Keychains/SystemRootCertificates.keychain"],
+                capture_output=True, text=True, timeout=30, check=True).stdout
+            context.load_verify_locations(cadata=pem)
+        except (OSError, subprocess.SubprocessError, ssl.SSLError):
+            pass
+    return context
+
+
 class EUtils:
     """Minimal E-utilities client: throttled, retrying, POST-only."""
 
@@ -100,6 +120,7 @@ class EUtils:
         self.min_interval = 0.11 if api_key else 0.34
         self.log = log or (lambda msg: None)
         self._last_request = 0.0
+        self._ssl = _ssl_context()
 
     def _throttle(self):
         wait = self._last_request + self.min_interval - time.monotonic()
@@ -122,7 +143,7 @@ class EUtils:
             self._throttle()
             try:
                 request = urllib.request.Request(url, data=body, headers=headers)
-                with urllib.request.urlopen(request, timeout=self.timeout) as resp:
+                with urllib.request.urlopen(request, timeout=self.timeout, context=self._ssl) as resp:
                     raw = resp.read()
                 return parse(raw)
             except urllib.error.HTTPError as err:
@@ -508,6 +529,7 @@ def find_pmids(client, args, console):
 
     def progress(n, lo, hi):
         console.status(f"  listed {n:,} of {want:,} PMIDs (up to {fmt_date(lo)})")
+        console.progress(n, want, "search")
 
     pmids = collect_pmids(client, args.query, start, end, limit=want,
                           progress=progress, warn=console.log)
@@ -565,21 +587,36 @@ TXT_LABELS = {"journal_abbrev": "Journal (abbrev.)", "pub_date": "Published",
               "doi": "DOI", "pmid": "PMID"}
 
 
-def format_txt(record):
-    """A record as a short, readable block of text."""
+def format_txt(record, width=100):
+    """A record as a short, readable block of text (width=None: no wrapping)."""
+    def fill(text, **kw):
+        return textwrap.fill(text, width, **kw) if width else text
+
     journal_key = "journal_abbrev" if record.get("journal_abbrev") else "journal"
     head = [f"PMID {record['pmid']}" if record.get("pmid") else "",
             str(record.get("year") or ""), record.get(journal_key) or "",
             f"doi:{record['doi']}" if record.get("doi") else ""]
     lines = [" | ".join(h for h in head if h)]
     if record.get("title"):
-        lines.append(textwrap.fill(record["title"], 100))
+        lines.append(fill(record["title"]))
     for key, value in record.items():
         if key in ("pmid", "year", "doi", "title", journal_key) or value in (None, "", []):
             continue
         label = TXT_LABELS.get(key, key.replace("_", " ").capitalize())
-        lines.append(textwrap.fill(f"{label}: {_cell(value)}", 100, subsequent_indent="  "))
+        lines.append(fill(f"{label}: {_cell(value)}", subsequent_indent="  "))
     return "\n".join(line for line in lines if line)
+
+
+def format_markdown(record):
+    """A record as Markdown: title heading, details, then the abstract."""
+    if isinstance(record, str):  # from a txt download
+        return record
+    details = format_txt({k: v for k, v in record.items() if k not in ("title", "abstract")},
+                         width=None)
+    parts = [f"## {record.get('title') or '(untitled)'}", details]
+    if record.get("abstract"):
+        parts.append("\n" + record["abstract"])
+    return "\n".join(parts)
 
 
 class RecordWriter:
@@ -663,6 +700,9 @@ class Console:
             self.stream.write("\r" + message + pad)
             self.stream.flush()
             self._width = len(message)
+
+    def progress(self, done, total, phase="download"):
+        """Numbers behind the status line, for graphical front ends."""
 
     def _clear(self):
         if self._width:
@@ -825,6 +865,7 @@ def fetch_parts(client, pmids, folder, manifest, batch_size, console):
             del parts[name]  # deleted by hand: fetch it again
     done = sum(p["pmids"] for p in parts.values())  # PMIDs in finished files
     started, fetched = time.monotonic(), 0  # this run only, for the speed estimate
+    console.progress(done, len(pmids))
 
     for number, chunk in enumerate(chunks, 1):
         name = part_name(number, fmt, compression)
@@ -845,6 +886,7 @@ def fetch_parts(client, pmids, folder, manifest, batch_size, console):
                 left = (len(pmids) - so_far) / rate
                 console.status(f"  file {number}/{len(chunks)}: {so_far:,}/{len(pmids):,} "
                                f"papers, {rate:.0f}/s, about {fmt_duration(left)} left")
+                console.progress(so_far, len(pmids))
             writer.close()
         except BaseException:
             writer.close()
@@ -870,40 +912,130 @@ def _columns(path, record):
     return fields + [key for key in record if key not in fields]
 
 
-def cmd_read(args, console):
-    files = find_part_files(args.paths)
+def matches(record, needles):
+    """True if the record contains every (lower-case) needle."""
+    if isinstance(record, dict):
+        haystack = " ".join(str(_cell(v)) for v in record.values()).lower()
+    else:
+        haystack = record.lower()
+    return all(n in haystack for n in needles)
+
+
+def iter_matching(paths, needles=()):
+    """(file, record) for every saved paper containing all the needles."""
+    files = find_part_files(paths)
     if not files:
         raise SystemExit("Error: no data files found")
-    needles = [g.lower() for g in args.grep or []]
-    shown = 0
-    csv_out = None
+    needles = [n.lower() for n in needles]
     for path in files:
         for record in iter_records(path):
-            if isinstance(record, dict):
-                haystack = " ".join(str(_cell(v)) for v in record.values()).lower()
+            if matches(record, needles):
+                yield path, record
+
+
+def export_markdown(paths, out_dir, words_per_file=100_000, needles=(), title="PubMed papers",
+                    about="", progress=None):
+    """Write papers as Markdown files of about `words_per_file` words each,
+    ready to attach to an AI chat, plus one .zip of them all.
+
+    Returns (markdown files, number of papers, zip path).
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    files, papers, words, fh = [], 0, 0, None
+    try:
+        for _, record in iter_matching(paths, needles):
+            block = format_markdown(record) + "\n\n"
+            size = len(block.split())
+            if fh is None or words + size > words_per_file:
+                if fh:
+                    fh.close()
+                files.append(out_dir / f"papers-{len(files) + 1:03d}.md")
+                fh = open(files[-1], "w", encoding="utf-8")
+                header = (f"# {title} (part {len(files)})\n\n"
+                          "Research papers from PubMed. Each paper starts with a '## ' title, "
+                          "then its PMID, year, journal, DOI and other details, then the "
+                          f"abstract.{' ' + about if about else ''}\n\n")
+                fh.write(header)
+                words = len(header.split())
+            fh.write(block)
+            words += size
+            papers += 1
+            if progress and papers % 200 == 0:
+                progress(papers)
+    finally:
+        if fh:
+            fh.close()
+    zip_path = out_dir.with_name(out_dir.name + ".zip")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+        for path in files:
+            zf.write(path, f"{out_dir.name}/{path.name}")
+    return files, papers, zip_path
+
+
+def export_csv(paths, out_path, needles=(), progress=None):
+    """One spreadsheet of all (matching) papers; Excel-friendly UTF-8."""
+    writer, papers = None, 0
+    with open(out_path, "w", encoding="utf-8-sig", newline="") as fh:
+        for path, record in iter_matching(paths, needles):
+            if isinstance(record, str):
+                raise SystemExit("Error: txt downloads can't be turned into a spreadsheet")
+            if writer is None:
+                writer = csv.DictWriter(fh, _columns(path, record), restval="",
+                                        extrasaction="ignore")
+                writer.writeheader()
+            writer.writerow({k: _cell(v) for k, v in record.items()})
+            papers += 1
+            if progress and papers % 500 == 0:
+                progress(papers)
+    return papers
+
+
+def cmd_read(args, console):
+    shown = 0
+    csv_out = None
+    for path, record in iter_matching(args.paths, args.grep or []):
+        shown += 1
+        if not args.count:
+            if isinstance(record, str) or args.output_as == "txt":
+                text = record if isinstance(record, str) else format_txt(record)
+                print(text + "\n")
+            elif args.output_as == "jsonl":
+                print(json.dumps(record, ensure_ascii=False))
             else:
-                haystack = record.lower()
-            if not all(n in haystack for n in needles):
-                continue
-            shown += 1
-            if not args.count:
-                if isinstance(record, str) or args.output_as == "txt":
-                    text = record if isinstance(record, str) else format_txt(record)
-                    print(text + "\n")
-                elif args.output_as == "jsonl":
-                    print(json.dumps(record, ensure_ascii=False))
-                else:
-                    if csv_out is None:
-                        csv_out = csv.DictWriter(sys.stdout, _columns(path, record), restval="",
-                                                 extrasaction="ignore", lineterminator="\n")
-                        csv_out.writeheader()
-                    csv_out.writerow({k: _cell(v) for k, v in record.items()})
-            if args.limit and shown >= args.limit:
-                break
+                if csv_out is None:
+                    csv_out = csv.DictWriter(sys.stdout, _columns(path, record), restval="",
+                                             extrasaction="ignore", lineterminator="\n")
+                    csv_out.writeheader()
+                csv_out.writerow({k: _cell(v) for k, v in record.items()})
         if args.limit and shown >= args.limit:
             break
     if args.count:
         print(f"{shown:,}")
+    return 0
+
+
+def export_stamp():
+    return datetime.now().strftime("%Y-%m-%d %H.%M.%S")
+
+
+def cmd_export(args, console):
+    folder = Path(args.folder)
+    needles = args.grep or []
+    if args.output_as == "csv":
+        out = Path(args.output or folder / "exports" / f"spreadsheet {export_stamp()}.csv")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        papers = export_csv([folder], out, needles)
+        console.log(f"Saved {papers:,} papers to {out}")
+        return 0
+    out = Path(args.output or folder / "exports" / f"for AI {export_stamp()}")
+    manifest = load_manifest(folder / "manifest.json") or {}
+    query = (manifest.get("settings") or {}).get("query")
+    files, papers, zip_path = export_markdown(
+        [folder], out, args.words, needles, title=folder.name,
+        about=f"PubMed search: {query}" if query else "")
+    console.log(f"Saved {papers:,} papers in {len(files)} Markdown file(s) in {out}/")
+    console.log(f"All of them zipped: {zip_path}")
     return 0
 
 
@@ -1072,6 +1204,21 @@ def build_parser():
                    help="print as txt (default), jsonl or csv")
     p.add_argument("--count", action="store_true", help="only print how many papers match")
     p.set_defaults(func=cmd_read)
+
+    p = sub.add_parser("export", help="turn a download into AI-ready Markdown or a spreadsheet",
+                       description="Turn a download into Markdown files sized for AI tools "
+                                   "(ChatGPT, Claude, Gemini, NotebookLM...) or one CSV "
+                                   "spreadsheet.")
+    p.add_argument("folder", help="the download folder")
+    p.add_argument("--as", dest="output_as", choices=("ai", "csv"), default="ai",
+                   help="ai: Markdown files + zip (default); csv: one spreadsheet")
+    p.add_argument("--words", type=_positive_int, default=100_000, metavar="N",
+                   help="about N words per Markdown file (default: 100000)")
+    p.add_argument("-g", "--grep", action="append", metavar="TEXT",
+                   help="only papers containing TEXT (repeat to require several)")
+    p.add_argument("-o", "--output", metavar="PATH",
+                   help="where to write (default: FOLDER/exports/...)")
+    p.set_defaults(func=cmd_export)
     return parser
 
 
